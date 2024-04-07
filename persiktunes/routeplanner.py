@@ -1,3 +1,9 @@
+"""
+### Routeplanner module `specific`
+
+This module contains all the routeplanner used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
