@@ -1,3 +1,9 @@
+"""
+### Exceptions module `main`
+
+This module contains all the exceptions used in PersikTunes.
+"""
+
 __all__ = (
     "PersikTunesException",
     "NodeException",
