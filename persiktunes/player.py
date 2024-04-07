@@ -1,3 +1,9 @@
+"""
+### Player module `main`
+
+This module contains all the player used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 import time
