@@ -1,3 +1,9 @@
+"""
+### Pool module `main`
+
+This module contains all the pool used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 import asyncio
