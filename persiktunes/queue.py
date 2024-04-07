@@ -1,3 +1,9 @@
+"""
+### Queue module `main`
+
+This module contains all the queue used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 import random
