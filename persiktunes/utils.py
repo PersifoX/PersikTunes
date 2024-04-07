@@ -1,3 +1,9 @@
+"""
+### Utils module `specific`
+
+This module contains all the utils used in PersikTunes.
+"""
+
 import random
 import socket
 import time
