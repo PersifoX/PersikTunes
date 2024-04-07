@@ -1,3 +1,9 @@
+"""
+### Enums Module `main`
+
+This module contains all the enums used in PersikTunes.
+"""
+
 import re
 from enum import Enum
 from enum import IntEnum
