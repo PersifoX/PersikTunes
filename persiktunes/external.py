@@ -1,3 +1,9 @@
+"""
+### External module `specific`
+
+This module contains all the external functions used in PersikTunes.
+"""
+
 import spotipy
 import ytmusicapi
 
