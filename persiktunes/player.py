@@ -17,7 +17,7 @@ from disnake.ext import commands
 
 from . import events
 from .enums import SearchType
-from .events import PersikTunesEvent
+from .events import PersikEvent
 from .events import TrackEndEvent
 from .events import TrackStartEvent
 from .exceptions import FilterInvalidArgument
@@ -31,7 +31,7 @@ from .objects import Playlist
 from .objects import Track
 from .pool import Node
 from .pool import NodePool
-from PersikTunes.utils import LavalinkVersion
+from .utils import LavalinkVersion
 
 if TYPE_CHECKING:
     from disnake.types.gateway import VoiceServerUpdateEvent
@@ -354,7 +354,7 @@ class Player(VoiceProtocol):
 
     async def _dispatch_event(self, data: dict) -> None:
         event_type: str = data["type"]
-        event: PersikTunesEvent = getattr(events, event_type)(data, self)
+        event: PersikEvent = getattr(events, event_type)(data, self)
 
         if isinstance(event, TrackEndEvent) and event.reason not in (
             "REPLACED",
