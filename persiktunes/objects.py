@@ -1,3 +1,9 @@
+"""
+### Objects module `legacy`
+
+This module contains all the objects used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 from typing import List
