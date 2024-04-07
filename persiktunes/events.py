@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .player import Player
 
 __all__ = (
-    "PersikTunesEvent",
+    "PersikEvent",
     "TrackStartEvent",
     "TrackEndEvent",
     "TrackStuckEvent",
@@ -28,13 +28,13 @@ __all__ = (
 )
 
 
-class PersikTunesEvent(ABC):
+class PersikEvent(ABC):
     """The base class for all events dispatched by a node.
     Every event must be formatted within your bot's code as a listener.
     i.e: If you want to listen for when a track starts, the event would be:
     ```py
     @bot.listen
-    async def on_PersikTunes_track_start(self, event):
+    async def on_persik_track_start(self, event):
     ```
     """
 
@@ -42,12 +42,12 @@ class PersikTunesEvent(ABC):
     handler_args: Tuple
 
     def dispatch(self, bot: Client) -> None:
-        bot.dispatch(f"PersikTunes_{self.name}", *self.handler_args)
+        bot.dispatch(f"persik_{self.name}", *self.handler_args)
 
 
-class TrackStartEvent(PersikTunesEvent):
+class TrackStartEvent(PersikEvent):
     """Fired when a track has successfully started.
-    Returns the player associated with the event and the PersikTunes.Track object.
+    Returns the player associated with the event and the persik.Track object.
     """
 
     name = "track_start"
@@ -61,18 +61,16 @@ class TrackStartEvent(PersikTunesEvent):
         self.player: Player = player
         self.track: Optional[Track] = self.player._current
 
-        # on_PersikTunes_track_start(player, track)
+        # on_persik_track_start(player, track)
         self.handler_args = self.player, self.track
 
     def __repr__(self) -> str:
-        return (
-            f"<PersikTunes.TrackStartEvent player={self.player!r} track={self.track!r}>"
-        )
+        return f"<Persik.TrackStartEvent player={self.player!r} track={self.track!r}>"
 
 
-class TrackEndEvent(PersikTunesEvent):
+class TrackEndEvent(PersikEvent):
     """Fired when a track has successfully ended.
-    Returns the player associated with the event along with the PersikTunes.Track object and reason.
+    Returns the player associated with the event along with the persik.Track object and reason.
     """
 
     name = "track_end"
@@ -84,19 +82,19 @@ class TrackEndEvent(PersikTunesEvent):
         self.track: Optional[Track] = self.player._ending_track
         self.reason: str = data["reason"]
 
-        # on_PersikTunes_track_end(player, track, reason)
+        # on_persik_track_end(player, track, reason)
         self.handler_args = self.player, self.track, self.reason
 
     def __repr__(self) -> str:
         return (
-            f"<PersikTunes.TrackEndEvent player={self.player!r} track_id={self.track!r} "
+            f"<Persik.TrackEndEvent player={self.player!r} track_id={self.track!r} "
             f"reason={self.reason!r}>"
         )
 
 
-class TrackStuckEvent(PersikTunesEvent):
+class TrackStuckEvent(PersikEvent):
     """Fired when a track is stuck and cannot be played. Returns the player
-    associated with the event along with the PersikTunes.Track object
+    associated with the event along with the persik.Track object
     to be further parsed by the end user.
     """
 
@@ -109,17 +107,17 @@ class TrackStuckEvent(PersikTunesEvent):
         self.track: Optional[Track] = self.player._ending_track
         self.threshold: float = data["thresholdMs"]
 
-        # on_PersikTunes_track_stuck(player, track, threshold)
+        # on_persik_track_stuck(player, track, threshold)
         self.handler_args = self.player, self.track, self.threshold
 
     def __repr__(self) -> str:
         return (
-            f"<PersikTunes.TrackStuckEvent player={self.player!r} track={self.track!r} "
+            f"<Persik.TrackStuckEvent player={self.player!r} track={self.track!r} "
             f"threshold={self.threshold!r}>"
         )
 
 
-class TrackExceptionEvent(PersikTunesEvent):
+class TrackExceptionEvent(PersikEvent):
     """Fired when a track error has occured.
     Returns the player associated with the event along with the error code and exception.
     """
@@ -138,11 +136,11 @@ class TrackExceptionEvent(PersikTunesEvent):
             "",
         ) or data.get("exception", "")
 
-        # on_PersikTunes_track_exception(player, track, error)
+        # on_persik_track_exception(player, track, error)
         self.handler_args = self.player, self.track, self.exception
 
     def __repr__(self) -> str:
-        return f"<PersikTunes.TrackExceptionEvent player={self.player!r} exception={self.exception!r}>"
+        return f"<Persik.TrackExceptionEvent player={self.player!r} exception={self.exception!r}>"
 
 
 class WebSocketClosedPayload:
@@ -158,12 +156,12 @@ class WebSocketClosedPayload:
 
     def __repr__(self) -> str:
         return (
-            f"<PersikTunes.WebSocketClosedPayload guild={self.guild!r} code={self.code!r} "
+            f"<Persik.WebSocketClosedPayload guild={self.guild!r} code={self.code!r} "
             f"reason={self.reason!r} by_remote={self.by_remote!r}>"
         )
 
 
-class WebSocketClosedEvent(PersikTunesEvent):
+class WebSocketClosedEvent(PersikEvent):
     """Fired when a websocket connection to a node has been closed.
     Returns the reason and the error code.
     """
@@ -175,14 +173,14 @@ class WebSocketClosedEvent(PersikTunesEvent):
     def __init__(self, data: dict, _: Any) -> None:
         self.payload: WebSocketClosedPayload = WebSocketClosedPayload(data)
 
-        # on_PersikTunes_websocket_closed(payload)
+        # on_persik_websocket_closed(payload)
         self.handler_args = (self.payload,)
 
     def __repr__(self) -> str:
-        return f"<PersikTunes.WebsocketClosedEvent payload={self.payload!r}>"
+        return f"<Persik.WebsocketClosedEvent payload={self.payload!r}>"
 
 
-class WebSocketOpenEvent(PersikTunesEvent):
+class WebSocketOpenEvent(PersikEvent):
     """Fired when a websocket connection to a node has been initiated.
     Returns the target and the session SSRC.
     """
@@ -195,8 +193,8 @@ class WebSocketOpenEvent(PersikTunesEvent):
         self.target: str = data["target"]
         self.ssrc: int = data["ssrc"]
 
-        # on_PersikTunes_websocket_open(target, ssrc)
+        # on_persik_websocket_open(target, ssrc)
         self.handler_args = self.target, self.ssrc
 
     def __repr__(self) -> str:
-        return f"<PersikTunes.WebsocketOpenEvent target={self.target!r} ssrc={self.ssrc!r}>"
+        return f"<Persik.WebsocketOpenEvent target={self.target!r} ssrc={self.ssrc!r}>"
