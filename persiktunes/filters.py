@@ -1,3 +1,9 @@
+"""
+### Filters module `main`
+
+This module contains all the filters used in PersikTunes.
+"""
+
 import collections
 from typing import Any
 from typing import Dict
