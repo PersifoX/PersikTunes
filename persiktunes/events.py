@@ -1,3 +1,9 @@
+"""
+### Events module `main`
+
+This module contains all the events used in PersikTunes.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
