@@ -31,6 +31,7 @@ from .enums import *
 from .events import *
 from .exceptions import *
 from .filters import *
+from .models import *
 from .objects import *
 from .queue import *
 from .player import *
