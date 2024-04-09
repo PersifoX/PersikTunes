@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, Any, Literal, Union, List
 
 """
-LAVALINK BASE MODELS (prefixes with Base)
+LAVALINK BASE MODELS
 """
 
 
