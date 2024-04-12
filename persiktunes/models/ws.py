@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, Any, Literal, Union, List
-from models.base import LavalinkTrack, LavalinkExceptionResponse
+from persiktunes.models.restapi import LavalinkTrack, LavalinkExceptionResponse
 
 """
 LAVALINK WS MODELS
