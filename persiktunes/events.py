@@ -10,7 +10,6 @@ from abc import ABC
 from typing import Any
 from typing import Optional
 from typing import Tuple
-from typing import TYPE_CHECKING
 
 from disnake import Client
 from disnake import Guild
@@ -19,19 +18,9 @@ from disnake.ext import commands
 from .objects import Track
 from .pool import NodePool
 
-if TYPE_CHECKING:
-    from .player import Player
+from .models.ws import *
 
-__all__ = (
-    "PersikEvent",
-    "TrackStartEvent",
-    "TrackEndEvent",
-    "TrackStuckEvent",
-    "TrackExceptionEvent",
-    "WebSocketClosedPayload",
-    "WebSocketClosedEvent",
-    "WebSocketOpenEvent",
-)
+from .player import Player
 
 
 class PersikEvent(ABC):
