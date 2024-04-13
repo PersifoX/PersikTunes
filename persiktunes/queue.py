@@ -20,8 +20,6 @@ from .exceptions import QueueException
 from .exceptions import QueueFull
 from .objects import Track
 
-__all__ = ("Queue",)
-
 
 class Queue(Iterable[Track]):
     """Queue for PersikTunes. This queue takes PersikTunes.Track as an input and includes looping and shuffling."""

@@ -11,7 +11,6 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import TYPE_CHECKING
 from typing import Union
 
 from disnake import Client
@@ -38,12 +37,6 @@ from .objects import Track
 from .pool import Node
 from .pool import NodePool
 from .utils import LavalinkVersion
-
-if TYPE_CHECKING:
-    from disnake.types.gateway import VoiceServerUpdateEvent
-    from disnake.types.voice import GuildVoiceState
-
-__all__ = ("Filters", "Player")
 
 
 class Filters:
@@ -145,25 +138,6 @@ class Player(VoiceProtocol):
     await ctx.author.voice.channel.connect(cls=PersikTunes.Player)
     ```
     """
-
-    __slots__ = (
-        "client",
-        "channel",
-        "_bot",
-        "_guild",
-        "_node",
-        "_current",
-        "_filters",
-        "_volume",
-        "_paused",
-        "_is_connected",
-        "_last_position",
-        "_last_update",
-        "_ending_track",
-        "_log",
-        "_voice_state",
-        "_player_endpoint_uri",
-    )
 
     def __call__(self, client: Client, channel: VoiceChannel) -> Player:
         self.client = client

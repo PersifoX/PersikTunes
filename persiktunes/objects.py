@@ -24,12 +24,6 @@ from .enums import SearchType
 from .enums import TrackType
 from .filters import Filter
 
-__all__ = (
-    "Track",
-    "Playlist",
-    "Author",
-)
-
 
 class Author:
     """The base author object. Returns author information needed for parsing by Lavalink plugin."""

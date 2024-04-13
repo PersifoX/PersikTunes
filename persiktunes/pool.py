@@ -57,11 +57,6 @@ from .external import External
 if TYPE_CHECKING:
     from .player import Player
 
-__all__ = (
-    "Node",
-    "NodePool",
-)
-
 VERSION_REGEX = re.compile(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[a-zA-Z0-9_-]+)?")
 
 
