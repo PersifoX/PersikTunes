@@ -7,35 +7,21 @@ This module contains all the player used in PersikTunes.
 from __future__ import annotations
 
 import time
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
+from typing import Any, Dict, List, Optional, Union
 
-from disnake import Client
-from disnake import Guild
-from disnake import VoiceChannel
-from disnake import VoiceProtocol
-from disnake import Member, User, ClientUser
+from disnake import (Client, ClientUser, Guild, Member, User, VoiceChannel,
+                     VoiceProtocol)
 from disnake.ext import commands
 
 from . import events
 from .enums import SearchType
-from .events import PersikEvent
-from .events import TrackEndEvent
-from .events import TrackStartEvent
-from .exceptions import FilterInvalidArgument
-from .exceptions import FilterTagAlreadyInUse
-from .exceptions import FilterTagInvalid
-from .exceptions import TrackInvalidPosition
-from .exceptions import TrackLoadError
-from .filters import Filter
-from .filters import Timescale
-from .objects import Playlist
-from .objects import Track
-from .pool import Node
-from .pool import NodePool
+from .events import PersikEvent, TrackEndEvent, TrackStartEvent
+from .exceptions import (FilterInvalidArgument, FilterTagAlreadyInUse,
+                         FilterTagInvalid, TrackInvalidPosition,
+                         TrackLoadError)
+from .filters import Filter, Timescale
+from .objects import Playlist, Track
+from .pool import Node, NodePool
 from .utils import LavalinkVersion
 
 
