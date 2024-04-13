@@ -1,5 +1,6 @@
+from typing import Any, List, Literal, Optional, Union
+
 from pydantic import BaseModel
-from typing import Optional, Any, Literal, Union, List
 
 """
 LAVALINK BASE MODELS
@@ -196,3 +197,73 @@ class LavalinkPlayer(BaseModel):
     state: PlayerState
     voice: VoiceState
     filters: Filters
+
+
+"""
+LAVALINK REST API
+"""
+
+
+class UpdatePlayerTrack(BaseModel):
+    encoded: Optional[str] = None
+    identifier: Optional[str] = None
+    userData: Optional[LavalinkTrack] = None
+
+
+class BaseRestRequest(BaseModel):
+    method: Literal["GET", "POST", "PUT", "DELETE"]
+
+
+class BaseRestResponse(BaseModel):
+    pass
+
+
+class GetPlayersResponse(BaseRestResponse):
+    players: List[LavalinkPlayer]
+
+
+class GetPlayerResponse(BaseRestResponse):
+    player: LavalinkPlayer
+
+
+class UpdatePlayerResponse(BaseRestResponse):
+    player: LavalinkPlayer
+
+
+class UpdatePlayerRequest(BaseRestRequest):
+    method = "PATCH"
+    noReplase: bool = False
+    track: Optional[UpdatePlayerTrack] = None
+    position: int = 0
+    endTime: Optional[int] = None
+    volume: Optional[int] = None
+    pause: Optional[bool] = None
+    filters: Optional[Filters] = None
+    voice: Optional[VoiceState] = None
+
+
+class DeletePlayerRequest(BaseRestRequest):
+    method = "DELETE"
+
+
+class UpdateSessionRequest(BaseRestRequest):
+    method = "PATCH"
+    resuming: Optional[bool] = False
+    timeout: Optional[int] = None
+
+
+class UpdateSessionResponse(BaseRestResponse):
+    resuming: bool
+    timeout: int
+
+
+class GetLavalinkVersionRequest(BaseRestRequest):
+    method = "GET"
+
+
+class GetLavalinkVersionResponse(BaseRestResponse):
+    pass
+
+
+class GetLavalinkStatsRequest(BaseRestRequest):
+    method = "GET"
