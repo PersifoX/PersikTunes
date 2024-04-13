@@ -1,6 +1,8 @@
+from typing import Literal, Optional
+
 from pydantic import BaseModel
-from typing import Optional, Any, Literal, Union, List
-from persiktunes.models.restapi import LavalinkTrack, LavalinkExceptionResponse
+
+from persiktunes.models.restapi import LavalinkExceptionResponse, LavalinkTrack
 
 """
 LAVALINK WS MODELS
@@ -90,3 +92,17 @@ class WebSocketClosedEvent(EventOP):
     code: int
     reason: str
     byRemote: bool
+
+
+"""
+DISCORD API MODELS
+"""
+
+
+class DiscordEvent(BaseModel):
+    t: Literal[
+        "VOICE_SERVER_UPDATE",
+        "VOICE_STATE_UPDATE",
+    ]
+
+    d: dict
