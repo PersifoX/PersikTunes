@@ -25,8 +25,6 @@ class Filter:
     This is necessary for the removal of filters.
     """
 
-    __slots__ = ("payload", "tag", "preload")
-
     def __init__(self, *, tag: str):
         self.payload: Optional[Dict] = None
         self.tag: str = tag
@@ -45,11 +43,6 @@ class Equalizer(Filter):
     i.e: Applying a bass boost filter to emphasize the bass in a song.
     The format for the levels is: List[Tuple[int, float]]
     """
-
-    __slots__ = (
-        "eq",
-        "raw",
-    )
 
     def __init__(self, *, tag: str, levels: list):
         super().__init__(tag=tag)
@@ -189,8 +182,6 @@ class Timescale(Filter):
     a certain amount to produce said effect.
     """
 
-    __slots__ = ("speed", "pitch", "rate")
-
     def __init__(
         self, *, tag: str, speed: float = 1.0, pitch: float = 1.0, rate: float = 1.0
     ):
@@ -250,8 +241,6 @@ class Karaoke(Filter):
     Best for karaoke as the filter implies.
     """
 
-    __slots__ = ("level", "mono_level", "filter_band", "filter_width")
-
     def __init__(
         self,
         *,
@@ -300,8 +289,6 @@ class Tremolo(Filter):
     causing it to sound like the music is changing in volume rapidly.
     """
 
-    __slots__ = ("frequency", "depth")
-
     def __init__(self, *, tag: str, frequency: float = 2.0, depth: float = 0.5):
         super().__init__(tag=tag)
 
@@ -339,7 +326,6 @@ class Vibrato(Filter):
     but changes in pitch rather than volume.
     """
 
-    __slots__ = ("frequency", "depth")
 
     def __init__(self, *, tag: str, frequency: float = 2.0, depth: float = 0.5):
         super().__init__(tag=tag)
@@ -378,7 +364,6 @@ class Rotation(Filter):
     the audio is being rotated around the listener's head
     """
 
-    __slots__ = ("rotation_hertz",)
 
     def __init__(self, *, tag: str, rotation_hertz: float = 5):
         super().__init__(tag=tag)
@@ -401,12 +386,6 @@ class ChannelMix(Filter):
     for some cool effects when done correctly.
     """
 
-    __slots__ = (
-        "left_to_left",
-        "right_to_right",
-        "left_to_right",
-        "right_to_left",
-    )
 
     def __init__(
         self,
@@ -473,17 +452,6 @@ class Distortion(Filter):
     distortion is needed.
     """
 
-    __slots__ = (
-        "sin_offset",
-        "sin_scale",
-        "cos_offset",
-        "cos_scale",
-        "tan_offset",
-        "tan_scale",
-        "offset",
-        "scale",
-    )
-
     def __init__(
         self,
         *,
@@ -548,8 +516,6 @@ class LowPass(Filter):
     """Filter which supresses higher frequencies and allows lower frequencies to pass.
     You can also do this with the Equalizer filter, but this is an easier way to do it.
     """
-
-    __slots__ = ("smoothing", "payload")
 
     def __init__(self, *, tag: str, smoothing: float = 20):
         super().__init__(tag=tag)

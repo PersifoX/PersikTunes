@@ -24,15 +24,6 @@ from .objects import Track
 class Queue(Iterable[Track]):
     """Queue for PersikTunes. This queue takes PersikTunes.Track as an input and includes looping and shuffling."""
 
-    __slots__ = (
-        "max_size",
-        "_queue",
-        "_overflow",
-        "_loop_mode",
-        "_current_item",
-        "_return_exceptions",
-    )
-
     def __init__(
         self,
         max_size: Optional[int] = None,
@@ -126,9 +117,6 @@ class Queue(Iterable[Track]):
             self.extend(other)
             return self
 
-        raise TypeError(
-            f"Adding '{type(other)}' type to the queue is not supported.",
-        )
 
     def _get(self) -> Track:
         return self._queue.pop(0)

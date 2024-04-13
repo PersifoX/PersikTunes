@@ -28,13 +28,6 @@ from .filters import Filter
 class Author:
     """The base author object. Returns author information needed for parsing by Lavalink plugin."""
 
-    __slots__ = (
-        "name",
-        "type",
-        "avatar",
-        "url",
-    )
-
     def __init__(
         self,
         *,
@@ -58,32 +51,6 @@ class Track:
     """The base track object. Returns critical track information needed for parsing by Lavalink.
     You can also pass in commands.Context to get a disnake Context object in your track.
     """
-
-    __slots__ = (
-        "track_id",
-        "info",
-        "plugin_info",
-        "track_type",
-        "filters",
-        "timestamp",
-        "lyrics",
-        "original",
-        "_search_type",
-        "playlist",
-        "title",
-        "author",
-        "uri",
-        "identifier",
-        "isrc",
-        "thumbnail",
-        "length",
-        "ctx",
-        "requester",
-        "is_stream",
-        "is_seekable",
-        "position",
-        "uuid",
-    )
 
     def __init__(
         self,
@@ -172,19 +139,6 @@ class Playlist:
     Returns critical playlist information needed for parsing by Lavalink.
     You can also pass in commands.Context to get a disnake Context object in your tracks.
     """
-
-    __slots__ = (
-        "playlist_info",
-        "tracks",
-        "name",
-        "author",
-        "playlist_type",
-        "_thumbnail",
-        "_uri",
-        "selected_track",
-        "track_count",
-        "length",
-    )
 
     def __init__(
         self,

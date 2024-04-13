@@ -579,7 +579,6 @@ class NodePool:
     This holds all the nodes that are to be used by the bot.
     """
 
-    __slots__ = ()
     _nodes: Dict[str, Node] = {}
 
     def __repr__(self) -> str:

@@ -72,19 +72,6 @@ class NodeStats:
     Gives critical information on the node, which is updated every minute.
     """
 
-    __slots__ = (
-        "used",
-        "free",
-        "reservable",
-        "allocated",
-        "cpu_cores",
-        "cpu_system_load",
-        "cpu_process_load",
-        "players_active",
-        "players_total",
-        "uptime",
-    )
-
     def __init__(self, data: Dict[str, Any]) -> None:
         memory: dict = data.get("memory", {})
         self.used = memory.get("used")
@@ -112,8 +99,6 @@ class FailingIPBlock:
     and the time they failed.
     """
 
-    __slots__ = ("address", "failing_time")
-
     def __init__(self, data: dict) -> None:
         self.address = data.get("address")
         self.failing_time = datetime.fromtimestamp(
@@ -129,15 +114,6 @@ class RouteStats:
     The base class for the route planner stats object.
     Gives critical information about the route planner strategy on the node.
     """
-
-    __slots__ = (
-        "strategy",
-        "ip_block_type",
-        "ip_block_size",
-        "failing_addresses",
-        "block_index",
-        "address_index",
-    )
 
     def __init__(self, data: Dict[str, Any]) -> None:
         self.strategy = RouteStrategy(data.get("class"))

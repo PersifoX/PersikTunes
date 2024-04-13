@@ -28,8 +28,6 @@ from .utils import LavalinkVersion
 class Filters:
     """Helper class for filters"""
 
-    __slots__ = ("_filters",)
-
     def __init__(self) -> None:
         self._filters: List[Filter] = []
 

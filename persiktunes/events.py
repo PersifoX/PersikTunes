@@ -47,11 +47,6 @@ class TrackStartEvent(PersikEvent):
 
     name = "track_start"
 
-    __slots__ = (
-        "player",
-        "track",
-    )
-
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
         self.track: Optional[Track] = self.player._current
@@ -69,8 +64,6 @@ class TrackEndEvent(PersikEvent):
     """
 
     name = "track_end"
-
-    __slots__ = ("player", "track", "reason")
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
@@ -95,8 +88,6 @@ class TrackStuckEvent(PersikEvent):
 
     name = "track_stuck"
 
-    __slots__ = ("player", "track", "threshold")
-
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
         self.track: Optional[Track] = self.player._ending_track
@@ -119,8 +110,6 @@ class TrackExceptionEvent(PersikEvent):
 
     name = "track_exception"
 
-    __slots__ = ("player", "track", "exception")
-
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
         assert self.player._ending_track is not None
@@ -139,7 +128,6 @@ class TrackExceptionEvent(PersikEvent):
 
 
 class WebSocketClosedPayload:
-    __slots__ = ("guild", "code", "reason", "by_remote")
 
     def __init__(self, data: dict):
         self.guild: Optional[Guild] = NodePool.get_node().bot.get_guild(
@@ -163,8 +151,6 @@ class WebSocketClosedEvent(PersikEvent):
 
     name = "websocket_closed"
 
-    __slots__ = ("payload",)
-
     def __init__(self, data: dict, _: Any) -> None:
         self.payload: WebSocketClosedPayload = WebSocketClosedPayload(data)
 
@@ -181,8 +167,6 @@ class WebSocketOpenEvent(PersikEvent):
     """
 
     name = "websocket_open"
-
-    __slots__ = ("target", "ssrc")
 
     def __init__(self, data: dict, _: Any) -> None:
         self.target: str = data["target"]
