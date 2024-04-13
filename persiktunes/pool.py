@@ -10,49 +10,33 @@ import asyncio
 import logging
 import random
 import re
-import time
 from os import path
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Type
-from typing import TYPE_CHECKING
-from typing import Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
 from urllib.parse import quote
 
 import aiohttp
-import orjson as json
-from disnake import Client, Interaction
+from disnake import Client, ClientUser, Interaction, Member, User
 from disnake.ext import commands
-from disnake.utils import MISSING
-from disnake import Member, User, ClientUser
-from ytmusicapi import YTMusic
 from spotipy.oauth2 import SpotifyClientCredentials
-from websockets import client
-from websockets import exceptions
-from websockets import typing as wstype
 
 from . import __version__
+from .clients.ws import LavalinkWebsocket
 from .enums import *
 from .enums import LogLevel
-from .exceptions import LavalinkVersionIncompatible
-from .exceptions import NodeConnectionFailure
-from .exceptions import NodeCreationError
-from .exceptions import NodeNotAvailable
-from .exceptions import NodeRestException
-from .exceptions import NoNodesAvailable
-from .exceptions import TrackLoadError
+from .exceptions import (
+    LavalinkVersionIncompatible,
+    NodeCreationError,
+    NodeNotAvailable,
+    NodeRestException,
+    NoNodesAvailable,
+    TrackLoadError,
+)
 from .filters import Filter
-from .objects import Playlist
-from .objects import Track
+from .objects import Playlist, Track
 from .routeplanner import RoutePlanner
-from .utils import ExponentialBackoff
-from .utils import LavalinkVersion
-from .utils import NodeStats
-from .utils import Ping
-from .external import External
+from .search.external import External
+from .utils import LavalinkVersion, NodeStats, Ping
 
 if TYPE_CHECKING:
     from .player import Player
@@ -65,41 +49,6 @@ class Node:
     This node object represents a Lavalink node.
     `external` arrtibute is an instance for searching tracks via python instead lavalink
     """
-
-    __slots__ = (
-        "_bot",
-        "_bot_user",
-        "_host",
-        "_port",
-        "_pool",
-        "_password",
-        "_identifier",
-        "_heartbeat",
-        "_resume_key",
-        "_resume_timeout",
-        "_secure",
-        "_fallback",
-        "_ytm_client",
-        "_spotify_credentials",
-        "_log_level",
-        "_websocket_uri",
-        "_rest_uri",
-        "_session",
-        "_websocket",
-        "_task",
-        "_loop",
-        "_session_id",
-        "_available",
-        "_version",
-        "_headers",
-        "_players",
-        "_route_planner",
-        "_log",
-        "_log_handler",
-        "_stats",
-        "available",
-        "external",
-    )
 
     def __init__(
         self,
@@ -117,7 +66,6 @@ class Node:
         loop: Optional[asyncio.AbstractEventLoop] = None,
         session: Optional[aiohttp.ClientSession] = None,
         fallback: bool = False,
-        ytm_client: Optional[YTMusic] = YTMusic(language="ru"),
         spotify_credentials: Optional[SpotifyClientCredentials] = None,
         log_level: LogLevel = LogLevel.INFO,
         log_handler: Optional[logging.Handler] = None,
@@ -136,23 +84,18 @@ class Node:
         self._resume_timeout: int = resume_timeout
         self._secure: bool = secure
         self._fallback: bool = fallback
-        self._ytm_client: Optional[YTMusic] = ytm_client
         self._spotify_credentials: Optional[SpotifyClientCredentials] = (
             spotify_credentials
         )
         self._log_level: LogLevel = log_level
         self._log_handler = log_handler
 
-        self._websocket_uri: str = (
-            f"{'wss' if self._secure else 'ws'}://{self._host}:{self._port}"
-        )
         self._rest_uri: str = (
             f"{'https' if self._secure else 'http'}://{self._host}:{self._port}"
         )
 
         self._session: aiohttp.ClientSession = session  # type: ignore
         self._loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
-        self._websocket: client.WebSocketClientProtocol
         self._task: asyncio.Task = None  # type: ignore
 
         self._session_id: Optional[str] = None
@@ -177,23 +120,36 @@ class Node:
 
         self._players: Dict[int, Player] = {}
 
-        self._bot.add_listener(self._update_handler, "on_socket_response")
+        self._websocket: LavalinkWebsocket = LavalinkWebsocket(
+            self,
+            self._host,
+            self._port,
+            self._password,
+            self._bot.user.id,
+            secure,
+            heartbeat,
+            resume_key,
+            resume_timeout,
+            loop,
+            session,
+            fallback,
+        )
 
     def __repr__(self) -> str:
         return (
-            f"<PersikTunes.node ws_uri={self._websocket_uri} rest_uri={self._rest_uri} "
+            f"<PersikTunes.node ws_uri={self._websocket._websocket_uri} rest_uri={self._rest_uri}"
             f"player_count={len(self._players)}>"
         )
 
     @property
     def is_connected(self) -> bool:
         """Property which returns whether this node is connected or not"""
-        return self._websocket is not None and not self._websocket.closed
+        return self._websocket.is_connected
 
     @property
     def stats(self) -> NodeStats:
         """Property which returns the node stats."""
-        return self._stats
+        return self._websocket._stats
 
     @property
     def players(self) -> Dict[int, Player]:
@@ -280,39 +236,10 @@ class Node:
                 "Lavalink version 3.7.0 or above is required to use this library.",
             )
 
-    async def _update_handler(self, data: dict) -> None:
-        await self._bot.wait_until_ready()
-
-        if not data:
-            return
-
-        if data["t"] == "VOICE_SERVER_UPDATE":
-            guild_id = int(data["d"]["guild_id"])
-            try:
-                player = self._players[guild_id]
-                await player.on_voice_server_update(data["d"])
-            except KeyError:
-                return
-
-        elif data["t"] == "VOICE_STATE_UPDATE":
-            if int(data["d"]["user_id"]) != self._bot_user.id:
-                return
-
-            guild_id = int(data["d"]["guild_id"])
-            try:
-                player = self._players[guild_id]
-                await player.on_voice_state_update(data["d"])
-            except KeyError:
-                return
-
-    async def _handle_node_switch(self) -> None:
-        nodes = [node for node in self.pool._nodes.copy().values() if node.is_connected]
-        new_node = random.choice(nodes)
-
-        for player in self.players.copy().values():
-            await player._swap_node(new_node=new_node)
-
-        await self.disconnect()
+        if self._version < LavalinkVersion(4, 0, 0):
+            self._log.warn(
+                f"Lavalink version {self._version} is not recommended, PersikTunes has been tested with Lavalink 4.0.0 or above."
+            )
 
     async def _configure_resuming(self) -> None:
         if not self._resume_key:
@@ -323,7 +250,6 @@ class Node:
         if self._version.major == 3:
             data["resumingKey"] = self._resume_key
         elif self._version.major == 4:
-            self._log.warning("Using a resume key with Lavalink v4 is deprecated.")
             data["resuming"] = True
 
         await self.send(
@@ -333,63 +259,9 @@ class Node:
             data=data,
         )
 
-    async def _listen(self) -> None:
-        while True:
-            try:
-                msg = await self._websocket.recv()
-                data = json.loads(msg)
-                self._log.debug(f"Recieved raw websocket message {msg}")
-                self._loop.create_task(self._handle_ws_msg(data=data))
-            except exceptions.ConnectionClosed:
-                if self.player_count > 0:
-                    for _player in self.players.values():
-                        self._loop.create_task(_player.destroy())
-
-                if self._fallback:
-                    self._loop.create_task(self._handle_node_switch())
-
-                self._loop.create_task(self._websocket.close())
-
-                backoff = ExponentialBackoff(base=7)
-                retry = backoff.delay()
-                self._log.debug(
-                    f"Retrying connection to Node {self._identifier} in {retry} secs"
-                )
-                await asyncio.sleep(retry)
-
-                if not self.is_connected:
-                    self._loop.create_task(self.connect(reconnect=True))
-
-    async def _handle_ws_msg(self, data: dict) -> None:
-        self._log.debug(
-            f"Recieved raw payload from Node {self._identifier} with data {data}"
-        )
-        op = data.get("op", None)
-
-        if op == "stats":
-            self._stats = NodeStats(data)
-            return
-
-        if op == "ready":
-            self._session_id = data["sessionId"]
-            await self._configure_resuming()
-
-        if "guildId" not in data:
-            return
-
-        player: Optional[Player] = self._players.get(int(data["guildId"]))
-        if not player:
-            return
-
-        if op == "event":
-            return await player._dispatch_event(data)
-
-        if op == "playerUpdate":
-            return await player._update_state(data)
-
     async def send(
         self,
-        method: str,
+        method: Literal["GET", "POST", "PATCH", "PUT", "DELETE"],
         path: str,
         include_version: bool = True,
         guild_id: Optional[Union[int, str]] = None,
@@ -445,95 +317,6 @@ class Node:
     def get_player(self, guild_id: int) -> Optional[Player]:
         """Takes a guild ID as a parameter. Returns a PersikTunes Player object or None."""
         return self._players.get(guild_id, None)
-
-    async def connect(self, *, reconnect: bool = False) -> Node:
-        """Initiates a connection with a Lavalink node and adds it to the node pool."""
-        await self._bot.wait_until_ready()
-
-        start = time.perf_counter()
-
-        if not self._session:
-            self._session = aiohttp.ClientSession()
-
-        try:
-            if not reconnect:
-                version: str = await self.send(
-                    method="GET",
-                    path="version",
-                    ignore_if_available=True,
-                    include_version=False,
-                )
-
-                await self._handle_version_check(version=version)
-
-                self._log.debug(
-                    f"Version check from Node {self._identifier} successful. Returned version {version}",
-                )
-
-            self._websocket = await client.connect(
-                f"{self._websocket_uri}/v{self._version.major}/websocket",
-                extra_headers=self._headers,
-                ping_interval=self._heartbeat,
-            )
-
-            if reconnect:
-                self._log.debug(f"Trying to reconnect to Node {self._identifier}...")
-                if self.player_count:
-                    for player in self.players.values():
-                        await player._refresh_endpoint_uri(self._session_id)
-
-            self._log.debug(
-                f"Node {self._identifier} successfully connected to websocket using {self._websocket_uri}/v{self._version.major}/websocket",
-            )
-
-            if not self._task:
-                self._task = self._loop.create_task(self._listen())
-
-            self._available = True
-
-            end = time.perf_counter()
-
-            self._log.info(
-                f"Connected to node {self._identifier}. Took {end - start:.3f}s"
-            )
-            return self
-
-        except (aiohttp.ClientConnectorError, OSError, ConnectionRefusedError):
-            raise NodeConnectionFailure(
-                f"The connection to node '{self._identifier}' failed.",
-            ) from None
-        except exceptions.InvalidHandshake:
-            raise NodeConnectionFailure(
-                f"The password for node '{self._identifier}' is invalid.",
-            ) from None
-        except exceptions.InvalidURI:
-            raise NodeConnectionFailure(
-                f"The URI for node '{self._identifier}' is invalid.",
-            ) from None
-
-    async def disconnect(self) -> None:
-        """Disconnects a connected Lavalink node and removes it from the node pool.
-        This also destroys any players connected to the node.
-        """
-
-        start = time.perf_counter()
-
-        for player in self.players.copy().values():
-            await player.destroy()
-            self._log.debug("All players disconnected from node.")
-
-        await self._websocket.close()
-        await self._session.close()
-        self._log.debug("Websocket and http session closed.")
-
-        del self._pool._nodes[self._identifier]
-        self.available = False
-        self._task.cancel()
-
-        end = time.perf_counter()
-        self._log.info(
-            f"Successfully disconnected from node {self._identifier} and closed all sessions. Took {end - start:.3f}s",
-        )
 
     async def build_track(
         self,
