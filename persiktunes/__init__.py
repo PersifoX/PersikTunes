@@ -1,7 +1,18 @@
 """
-PersikTunes
-~~~~~~
+## PersikTunes
+
 The modern Lavalink wrapper designed for disnake.
+
+### Dependencies:
+- `disnake` (v2.x)[ https://github.com/DisnakeDev/disnake ]
+- `Lavalink server` (v3.7.x) (v4.0.x is recommended)[ https://github.com/freyacodes/Lavalink ]
+
+### Recommended for usage:
+- `LavaSRC` (Lavalink plugin for additional sound sources)[ https://github.com/topi314/LavaSrc ]
+- `LavaSearch` (Lavalink plugin for additional search features)[ https://github.com/topi314/LavaSearch ]
+
+github repo: https://github.com/PersifoX/PersikTunes
+
 
 Copyright (c) 2024, persifox
 
