@@ -23,10 +23,10 @@ import disnake
 
 if not disnake.version_info.major >= 2:
 
-    class DiscordPyOutdated(Exception):
+    class DisnakeOutdated(Exception):
         pass
 
-    raise DiscordPyOutdated(
+    raise DisnakeOutdated(
         "You must have disnake (v2.0 or greater) to use this library. "
         "Uninstall your current version and install disnake 2.0 "
         "using 'pip install disnake[voice]'",

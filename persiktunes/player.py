@@ -9,16 +9,19 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from disnake import (Client, ClientUser, Guild, Member, User, VoiceChannel,
-                     VoiceProtocol)
+from disnake import Client, ClientUser, Guild, Member, User, VoiceChannel, VoiceProtocol
 from disnake.ext import commands
 
 from . import events
 from .enums import SearchType
 from .events import PersikEvent, TrackEndEvent, TrackStartEvent
-from .exceptions import (FilterInvalidArgument, FilterTagAlreadyInUse,
-                         FilterTagInvalid, TrackInvalidPosition,
-                         TrackLoadError)
+from .exceptions import (
+    FilterInvalidArgument,
+    FilterTagAlreadyInUse,
+    FilterTagInvalid,
+    TrackInvalidPosition,
+    TrackLoadError,
+)
 from .filters import Filter, Timescale
 from .objects import Playlist, Track
 from .pool import Node, NodePool
@@ -373,7 +376,7 @@ class Player(VoiceProtocol):
         you can also pass in a Spotify URL of a playlist, album or track and it will be parsed
         accordingly.
 
-        You can pass in a discord.py Context object to get a
+        You can pass in a disnake Context object to get a
         Context object on any track you search.
 
         You may also pass in a List of filters
@@ -393,7 +396,7 @@ class Player(VoiceProtocol):
         """
         Builds a track using a valid track identifier
 
-        You can also pass in a discord.py Context object to get a
+        You can also pass in a disnake Context object to get a
         Context object on the track it builds.
         """
 
@@ -407,7 +410,7 @@ class Player(VoiceProtocol):
     ) -> Optional[Union[List[Track], Playlist]]:
         """
         Gets recommendations from either YouTube or Spotify.
-        You can pass in a discord.py Context object to get a
+        You can pass in a disnake Context object to get a
         Context object on all tracks that get recommended.
         """
         return await self._node.get_recommendations(track=track, ctx=ctx)

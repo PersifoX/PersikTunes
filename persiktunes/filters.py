@@ -5,11 +5,7 @@ This module contains all the filters used in PersikTunes.
 """
 
 import collections
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .exceptions import FilterInvalidArgument
 
@@ -326,7 +322,6 @@ class Vibrato(Filter):
     but changes in pitch rather than volume.
     """
 
-
     def __init__(self, *, tag: str, frequency: float = 2.0, depth: float = 0.5):
         super().__init__(tag=tag)
 
@@ -364,7 +359,6 @@ class Rotation(Filter):
     the audio is being rotated around the listener's head
     """
 
-
     def __init__(self, *, tag: str, rotation_hertz: float = 5):
         super().__init__(tag=tag)
 
@@ -385,7 +379,6 @@ class ChannelMix(Filter):
     """Filter which manually adjusts the panning of the audio, which can make
     for some cool effects when done correctly.
     """
-
 
     def __init__(
         self,
