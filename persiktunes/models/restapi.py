@@ -13,8 +13,6 @@ LAVALINK BASE MODELS
 class ExtraModel(BaseModel):
     """Alows arbitrary types in pydantic models."""
 
-    pass
-
 
 ExtraModel.model_config["arbitrary_types_allowed"] = True
 
@@ -144,6 +142,10 @@ class Track(ExtraModel):
 
     playlist: Optional["Playlist"] = None
 
+    description: Optional[str] = None  # Optional track description
+
+    color: Optional[int] = None  # Track color
+
     @property
     def title(self) -> str:
         """Title of track"""
@@ -225,6 +227,10 @@ class Playlist(ExtraModel):
     uri: Optional[str] = None
     ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
     requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
+
+    description: Optional[str] = None  # Optional playlist description
+
+    color: Optional[int] = None  # Track color
 
     @property
     def length(self) -> int:
