@@ -6,22 +6,13 @@ This module contains all the objects used in PersikTunes.
 
 from __future__ import annotations
 
-from typing import List
-from typing import Optional
-from typing import Union
+from typing import List, Optional, Union
+from uuid import UUID, uuid4
 
-from uuid import UUID
-from uuid import uuid4
-
-from disnake import Interaction
-from disnake import ClientUser
-from disnake import Member
-from disnake import User
+from disnake import ClientUser, Interaction, Member, User
 from disnake.ext import commands
 
-from .enums import PlaylistType
-from .enums import SearchType
-from .enums import TrackType
+from .enums import PlaylistType, SearchType, TrackType
 from .filters import Filter
 
 
