@@ -9,6 +9,16 @@ from pydantic import BaseModel
 LAVALINK BASE MODELS
 """
 
+
+class ExtraModel(BaseModel):
+    """Alows arbitrary types in pydantic models."""
+
+    pass
+
+
+ExtraModel.model_config["arbitrary_types_allowed"] = True
+
+
 "FILTERS MODELS"
 
 
@@ -97,7 +107,7 @@ class LavalinkTrackInfo(BaseModel):
     title: str
     uri: Optional[str] = None
     artworkUrl: Optional[str] = None
-    isrc = Optional[str] = None
+    isrc: Optional[str] = None
     sourceName: str = None
 
 
@@ -113,7 +123,7 @@ LAVALINK MAIN MODELS
 """
 
 
-class LavalinkTrack(BaseModel):
+class Track(ExtraModel):
     """Base lavalink track model."""
 
     uuid: str = uuid4().__str__()  # Unique uuid for the track
@@ -132,7 +142,7 @@ class LavalinkTrack(BaseModel):
 
     filters: Optional[Filters] = None  # Additional filters
 
-    playlist: Optional["LavalinkPlaylist"] = None
+    playlist: Optional["Playlist"] = None
 
     @property
     def title(self) -> str:
@@ -189,7 +199,7 @@ class LavalinkTrack(BaseModel):
         return self.info.identifier
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, LavalinkTrack):
+        if not isinstance(other, Track):
             return False
 
         return other.uuid == self.uuid
@@ -201,20 +211,25 @@ class LavalinkTrack(BaseModel):
         return f"<PersikTunes.track title={self.info.title!r} uri=<{self.info.uri!r}> length={self.info.length}>"
 
 
-class LavalinkPlaylist(BaseModel):
+class Playlist(ExtraModel):
     """Base lavalink playlist model."""
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     info: LavalinkPlaylistInfo
     pluginInfo: Optional[Any] = None
-    tracks: List[LavalinkTrack]
+    tracks: List[Track] = []
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    length: int = sum([t.info.length for t in tracks])
+    length: int
 
     uri: Optional[str] = None
     ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
     requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
+
+    @property
+    def length(self) -> int:
+        """Length of playlist"""
+        return sum([t.info.length for t in self.tracks])
 
     @property
     def name(self) -> str:
@@ -273,22 +288,22 @@ class LavalinkTrackLoadingResponse(BaseModel):
     loadType: Literal["track", "playlist", "search", "empty", "error"]
     data: Optional[
         Union[
-            LavalinkTrack,
-            LavalinkPlaylist,
-            List[LavalinkTrack],
+            Track,
+            Playlist,
+            List[Track],
             LavalinkExceptionResponse,
         ]
     ] = {}
 
 
-class LavalinkTrackDecodeResponse(LavalinkTrack):
+class LavalinkTrackDecodeResponse(Track):
     """Response model is analog to LavalinkTrack."""
 
 
 class LavalinkTrackDecodeMultiplyResponse(BaseModel):
     """Base lavalink track decode multiply response model."""
 
-    tracks: List[LavalinkTrack]
+    tracks: List[Track]
 
 
 """
@@ -314,9 +329,9 @@ LAVALINK PLAYER API
 """
 
 
-class LavalinkPlayer(BaseModel):
+class LavalinkPlayer(ExtraModel):
     guildId: int
-    track: Optional[LavalinkTrack] = None
+    track: Optional[Track] = None
     volume: int
     paused: bool
     state: PlayerState
@@ -332,7 +347,7 @@ LAVALINK REST API
 class UpdatePlayerTrack(BaseModel):
     encoded: Optional[str] = None
     identifier: Optional[str] = None
-    userData: Optional[LavalinkTrack] = None
+    userData: Optional[Track] = None
 
 
 class BaseRestRequest(BaseModel):
@@ -356,7 +371,7 @@ class UpdatePlayerResponse(BaseRestResponse):
 
 
 class UpdatePlayerRequest(BaseRestRequest):
-    method = "PATCH"
+    method: str = "PATCH"
     noReplase: bool = False
     track: Optional[UpdatePlayerTrack] = None
     position: int = 0
@@ -368,11 +383,11 @@ class UpdatePlayerRequest(BaseRestRequest):
 
 
 class DeletePlayerRequest(BaseRestRequest):
-    method = "DELETE"
+    method: str = "DELETE"
 
 
 class UpdateSessionRequest(BaseRestRequest):
-    method = "PATCH"
+    method: str = "PATCH"
     resuming: Optional[bool] = False
     timeout: Optional[int] = None
 
@@ -383,7 +398,7 @@ class UpdateSessionResponse(BaseRestResponse):
 
 
 class GetLavalinkVersionRequest(BaseRestRequest):
-    method = "GET"
+    method: str = "GET"
 
 
 class GetLavalinkVersionResponse(BaseRestResponse):
@@ -391,4 +406,4 @@ class GetLavalinkVersionResponse(BaseRestResponse):
 
 
 class GetLavalinkStatsRequest(BaseRestRequest):
-    method = "GET"
+    method: str = "GET"
