@@ -33,6 +33,7 @@ from .exceptions import (
     TrackLoadError,
 )
 from .filters import Filter
+from .models.restapi import LavalinkPlaylist, LavalinkTrack
 from .objects import Playlist, Track
 from .routeplanner import RoutePlanner
 from .search.external import External
@@ -322,7 +323,7 @@ class Node:
         self,
         identifier: str,
         ctx: Optional[Union[commands.Context, Interaction]] = None,
-    ) -> Track:
+    ) -> LavalinkTrack:
         """
         Builds a track using a valid track identifier
 
@@ -335,12 +336,8 @@ class Node:
             path="decodetrack",
             query=f"encodedTrack={quote(identifier)}",
         )
-        return Track(
-            track_id=identifier,
-            ctx=ctx,
-            info=data,
-            track_type=TrackType(data["sourceName"]),
-        )
+
+        return LavalinkTrack.model_validate(data, context={"ctx": ctx})
 
     async def get_tracks(
         self,
