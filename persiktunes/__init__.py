@@ -27,13 +27,15 @@ __author__ = "persifox"
 __license__ = "GPL-3.0"
 __copyright__ = "Copyright (c) 2024, persifox"
 
+from .clients import *
 from .enums import *
 from .events import *
 from .exceptions import *
 from .filters import *
 from .models import *
 from .objects import *
-from .queue import *
 from .player import *
 from .pool import *
+from .queue import *
 from .routeplanner import *
+from .search import *
