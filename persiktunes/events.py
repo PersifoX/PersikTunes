@@ -7,20 +7,15 @@ This module contains all the events used in PersikTunes.
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any
-from typing import Optional
-from typing import Tuple
+from typing import Any, Optional, Tuple
 
-from disnake import Client
-from disnake import Guild
+from disnake import Client, Guild
 from disnake.ext import commands
+from models.ws import TrackStartEvent as TrackStartEventWS
 
 from .objects import Track
-from .pool import NodePool
-
-from .models.ws import *
-
 from .player import Player
+from .pool import NodePool
 
 
 class PersikEvent(ABC):
@@ -49,7 +44,7 @@ class TrackStartEvent(PersikEvent):
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
-        self.track: Optional[Track] = self.player._current
+        self.track: Optional[Track] = self.player.current
 
         # on_persik_track_start(player, track)
         self.handler_args = self.player, self.track
@@ -68,7 +63,7 @@ class TrackEndEvent(PersikEvent):
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
         self.track: Optional[Track] = self.player._ending_track
-        self.reason: str = data["reason"]
+        self.reason: str = data["reason"].lower()
 
         # on_persik_track_end(player, track, reason)
         self.handler_args = self.player, self.track, self.reason
@@ -115,10 +110,7 @@ class TrackExceptionEvent(PersikEvent):
         assert self.player._ending_track is not None
         self.track: Optional[Track] = self.player._ending_track
         # Error is for Lavalink <= 3.3
-        self.exception: str = data.get(
-            "error",
-            "",
-        ) or data.get("exception", "")
+        self.exception: str = data.get("error") or data.get("exception")
 
         # on_persik_track_exception(player, track, error)
         self.handler_args = self.player, self.track, self.exception
