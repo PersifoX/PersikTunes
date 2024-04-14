@@ -1,117 +1,13 @@
 from typing import Any, List, Literal, Optional, Union
+from uuid import uuid4
 
+from disnake import ClientUser, Interaction, Member, User
+from disnake.ext import commands
 from pydantic import BaseModel
 
 """
 LAVALINK BASE MODELS
 """
-
-
-class LavalinkTrackInfo(BaseModel):
-    """Base lavalink track info model."""
-
-    identifier: str
-    isSeekable: bool
-    author: str
-    length: int
-    isStream: bool
-    position: int
-    title: str
-    uri: Optional[str] = None
-    artworkUrl: Optional[str] = None
-    isrc = Optional[str] = None
-    sourceName = str = None
-
-
-class LavalinkPlaylistInfo(BaseModel):
-    """Base lavalink playlist info model."""
-
-    name: str
-    selectedTrack: Optional[int] = -1
-
-
-class LavalinkTrack(BaseModel):
-    """Base lavalink track model."""
-
-    encoded: str
-    info: LavalinkTrackInfo
-    pluginInfo: Optional[Any] = None
-    userData: Optional[Any] = None
-
-
-class LavalinkPlaylist(BaseModel):
-    """Base lavalink playlist model."""
-
-    info: LavalinkPlaylistInfo
-    pluginInfo: Optional[Any] = None
-    tracks: List[LavalinkTrack]
-
-
-"""
-LAVALINK RESPONSES MODELS
-"""
-
-
-class LavalinkResponseError(BaseModel):
-    """Base lavalink error model."""
-
-    timestamp: int
-    status: int
-    error: str
-    trace: Optional[str] = None
-    message: str
-    path: str
-
-
-class LavalinkExceptionResponse(BaseModel):
-    """Base lavalink exception response model."""
-
-    message: str
-    severity: Literal["common", "suspicious", "fault"]
-    cause: str
-
-
-class LavalinkTrackLoadingResponse(BaseModel):
-    """Base lavalink track loading response model."""
-
-    loadType: Literal["track", "playlist", "search", "empty", "error"]
-    data: Optional[
-        Union[
-            LavalinkTrack,
-            LavalinkPlaylist,
-            List[LavalinkTrack],
-            LavalinkExceptionResponse,
-        ]
-    ] = {}
-
-
-class LavalinkTrackDecodeResponse(LavalinkTrack):
-    """Response model is analog to LavalinkTrack."""
-
-
-class LavalinkTrackDecodeMultiplyResponse(BaseModel):
-    """Base lavalink track decode multiply response model."""
-
-    tracks: List[LavalinkTrack]
-
-
-"""
-LAVALINK PLAYER ALI MODELS
-"""
-
-
-class VoiceState(BaseModel):
-    token: str
-    endpoint: str
-    sessionId: str
-
-
-class PlayerState(BaseModel):
-    time: int
-    position: int
-    connected: bool
-    ping: int
-
 
 "FILTERS MODELS"
 
@@ -182,6 +78,235 @@ class Filters(BaseModel):
     channelMix: Optional[ChannelMix] = None
     lowPass: Optional[LowPass] = None
     pluginFilters: Optional[Any] = None
+
+
+"""
+LAVALINK INFO MODELS
+"""
+
+
+class LavalinkTrackInfo(BaseModel):
+    """Base lavalink track info model."""
+
+    identifier: str
+    isSeekable: bool
+    author: str
+    length: int
+    isStream: bool
+    position: int
+    title: str
+    uri: Optional[str] = None
+    artworkUrl: Optional[str] = None
+    isrc = Optional[str] = None
+    sourceName: str = None
+
+
+class LavalinkPlaylistInfo(BaseModel):
+    """Base lavalink playlist info model."""
+
+    name: str
+    selectedTrack: Optional[int] = -1
+
+
+"""
+LAVALINK MAIN MODELS
+"""
+
+
+class LavalinkTrack(BaseModel):
+    """Base lavalink track model."""
+
+    uuid: str = uuid4().__str__()  # Unique uuid for the track
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    encoded: str
+    info: LavalinkTrackInfo
+    pluginInfo: Optional[Any] = None
+    userData: Optional[Any] = None
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    lyrics: Optional[dict] = None
+
+    ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
+    requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
+
+    filters: Optional[Filters] = None  # Additional filters
+
+    playlist: Optional["LavalinkPlaylist"] = None
+
+    @property
+    def title(self) -> str:
+        """Title of track"""
+        return self.info.title
+
+    @property
+    def author(self) -> str:
+        """Author of track"""
+        return self.info.author
+
+    @property
+    def length(self) -> int:
+        """Length of track"""
+        return self.info.length
+
+    @property
+    def uri(self) -> str:
+        """URI of track"""
+        return self.info.uri
+
+    @property
+    def thumbnail(self) -> str:
+        """Thumbnail of track (artwork)"""
+        return self.info.artworkUrl
+
+    @property
+    def isrc(self) -> str:
+        """ISRC of track"""
+        return self.info.isrc
+
+    @property
+    def is_stream(self) -> bool:
+        """Is track a stream?"""
+        return self.info.isStream
+
+    @property
+    def position(self) -> int:
+        """Position of timeline"""
+        return self.info.position
+
+    @property
+    def is_seekable(self) -> bool:
+        """Is track seekable?"""
+        return self.info.isSeekable
+
+    @property
+    def source_name(self) -> str:
+        return self.info.sourceName
+
+    @property
+    def identifier(self) -> str:
+        """Identifier of track"""
+        return self.info.identifier
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, LavalinkTrack):
+            return False
+
+        return other.uuid == self.uuid
+
+    def __str__(self) -> str:
+        return self.info.title
+
+    def __repr__(self) -> str:
+        return f"<PersikTunes.track title={self.info.title!r} uri=<{self.info.uri!r}> length={self.info.length}>"
+
+
+class LavalinkPlaylist(BaseModel):
+    """Base lavalink playlist model."""
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    info: LavalinkPlaylistInfo
+    pluginInfo: Optional[Any] = None
+    tracks: List[LavalinkTrack]
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    length: int = sum([t.info.length for t in tracks])
+
+    uri: Optional[str] = None
+    ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
+    requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
+
+    @property
+    def name(self) -> str:
+        """Name of playlist"""
+        return self.info.name
+
+    @property
+    def selected_track(self) -> int:
+        """Selected track of playlist"""
+        return self.info.selectedTrack
+
+    @property
+    def track_count(self) -> int:
+        """Count of tracks in playlist"""
+        return len(self.tracks)
+
+    @property
+    def thumbnail(self) -> str:
+        """Thumbnail of playlist (artwork)"""
+        return self.pluginInfo.get("artworkUrl")
+
+    def __str__(self) -> str:
+        return self.info.name
+
+    def __repr__(self) -> str:
+        return f"<PersikTunes.playlist name={self.info.name!r} track_count={len(self.tracks)}>"
+
+
+"""
+LAVALINK RESPONSES MODELS
+"""
+
+
+class LavalinkResponseError(BaseModel):
+    """Base lavalink error model."""
+
+    timestamp: int
+    status: int
+    error: str
+    trace: Optional[str] = None
+    message: str
+    path: str
+
+
+class LavalinkExceptionResponse(BaseModel):
+    """Base lavalink exception response model."""
+
+    message: str
+    severity: Literal["common", "suspicious", "fault"]
+    cause: str
+
+
+class LavalinkTrackLoadingResponse(BaseModel):
+    """Base lavalink track loading response model."""
+
+    loadType: Literal["track", "playlist", "search", "empty", "error"]
+    data: Optional[
+        Union[
+            LavalinkTrack,
+            LavalinkPlaylist,
+            List[LavalinkTrack],
+            LavalinkExceptionResponse,
+        ]
+    ] = {}
+
+
+class LavalinkTrackDecodeResponse(LavalinkTrack):
+    """Response model is analog to LavalinkTrack."""
+
+
+class LavalinkTrackDecodeMultiplyResponse(BaseModel):
+    """Base lavalink track decode multiply response model."""
+
+    tracks: List[LavalinkTrack]
+
+
+"""
+LAVALINK PLAYER ALI MODELS
+"""
+
+
+class VoiceState(BaseModel):
+    token: str
+    endpoint: str
+    sessionId: str
+
+
+class PlayerState(BaseModel):
+    time: int
+    position: int
+    connected: bool
+    ping: int
 
 
 """
