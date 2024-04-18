@@ -33,10 +33,10 @@ from .exceptions import (
     TrackLoadError,
 )
 from .filters import Filter
-from .models.restapi import LavalinkPlaylist, LavalinkTrack
+from .models.restapi import Playlist, Track
 from .objects import Playlist, Track
 from .routeplanner import RoutePlanner
-from .search.external import External
+from .search.builtin import BuiltIn
 from .utils import LavalinkVersion, NodeStats, Ping
 
 if TYPE_CHECKING:
@@ -106,7 +106,7 @@ class Node:
         self._route_planner = RoutePlanner(self)
         self._log = self._setup_logging(self._log_level)
 
-        self.external = External(spotify_credentials=spotify_credentials)
+        self.external = BuiltIn(spotify_credentials=spotify_credentials)
 
         if not self._bot.user:
             raise NodeCreationError("Bot user is not ready yet.")
@@ -323,7 +323,7 @@ class Node:
         self,
         identifier: str,
         ctx: Optional[Union[commands.Context, Interaction]] = None,
-    ) -> LavalinkTrack:
+    ) -> Track:
         """
         Builds a track using a valid track identifier
 
@@ -337,7 +337,7 @@ class Node:
             query=f"encodedTrack={quote(identifier)}",
         )
 
-        return LavalinkTrack.model_validate(data, context={"ctx": ctx})
+        return Track.model_validate(data, context={"ctx": ctx})
 
     async def get_tracks(
         self,
