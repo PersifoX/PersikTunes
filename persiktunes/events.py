@@ -11,7 +11,6 @@ from typing import Any, Optional, Tuple
 
 from disnake import Client, Guild
 from disnake.ext import commands
-from models.ws import TrackStartEvent as TrackStartEventWS
 
 from .objects import Track
 from .player import Player
