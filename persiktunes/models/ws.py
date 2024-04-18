@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-from persiktunes.models.restapi import LavalinkExceptionResponse, LavalinkTrack
+from .restapi import LavalinkExceptionResponse, Track
 
 """
 LAVALINK WS MODELS
@@ -70,21 +70,21 @@ class EventOP(BaseWebsocketRequest):
 
 
 class TrackStartEvent(EventOP):
-    track: LavalinkTrack
+    track: Track
 
 
 class TrackEndEvent(EventOP):
-    track: LavalinkTrack
+    track: Track
     reason: Literal["finished", "loadFailed", "stopped", "replaced", "cleanup"]
 
 
 class TrackExceptionEvent(EventOP):
-    track: LavalinkTrack
+    track: Track
     exception: LavalinkExceptionResponse
 
 
 class TrackStuckEvent(EventOP):
-    track: LavalinkTrack
+    track: Track
     threshold: int
 
 
