@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, AnyStr, List, Literal, Optional, Union
 from uuid import uuid4
 
 from disnake import ClientUser, Interaction, Member, User
@@ -146,6 +146,8 @@ class Track(ExtraModel):
 
     color: Optional[int] = None  # Track color
 
+    tag: Optional[AnyStr] = None  # Optional track tag
+
     @property
     def title(self) -> str:
         """Title of track"""
@@ -200,6 +202,16 @@ class Track(ExtraModel):
         """Identifier of track"""
         return self.info.identifier
 
+    @property
+    def tag(self) -> str | None:
+        """Tag of track"""
+        return self.tag
+
+    @property
+    def color(self) -> int | None:
+        """Color of track"""
+        return self.color
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Track):
             return False
@@ -230,7 +242,9 @@ class Playlist(ExtraModel):
 
     description: Optional[str] = None  # Optional playlist description
 
-    color: Optional[int] = None  # Track color
+    color: Optional[int] = None  # Playlist color
+
+    tag: Optional[AnyStr] = None  # Optional playlist tag
 
     @property
     def length(self) -> int:
@@ -253,9 +267,14 @@ class Playlist(ExtraModel):
         return len(self.tracks)
 
     @property
-    def thumbnail(self) -> str:
+    def thumbnail(self) -> str | None:
         """Thumbnail of playlist (artwork)"""
-        return self.pluginInfo.get("artworkUrl")
+        return self.pluginInfo.get("artworkUrl") if self.pluginInfo else None
+
+    @property
+    def color(self) -> int | None:
+        """Color of playlist"""
+        return self.color
 
     def __str__(self) -> str:
         return self.info.name
