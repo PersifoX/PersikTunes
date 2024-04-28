@@ -1,17 +1,10 @@
-"""
-### External module `specific`
-
-This module contains all the external functions used in PersikTunes.
-"""
+from typing import Any, Dict, List, Literal
 
 import spotipy
 import ytmusicapi
 
 
-from typing import Literal, List, Dict, Any
-
-
-class External:
+class BuiltIn:
     def __init__(self, **kwargs) -> None:
 
         self.spotify = spotipy.Spotify(
@@ -122,7 +115,7 @@ class External:
 
         return result
 
-    def get_tracks(self, type: Literal["yt", "sp"], query: str) -> List[Dict[str, str]]:
+    def search(self, type: Literal["yt", "sp"], query: str) -> List[Dict[str, str]]:
         """
         A function to get tracks based on the type and query.
 
