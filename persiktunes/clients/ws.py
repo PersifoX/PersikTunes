@@ -19,7 +19,8 @@ from persiktunes import __version__
 
 class LavalinkWebsocket:
     """
-    Lavalink Websocket class. Path `/v4/websocket`
+    Lavalink Websocket class\n
+    #### `/v4/websocket`
     """
 
     def __init__(
@@ -35,7 +36,6 @@ class LavalinkWebsocket:
         resume_key: Optional[str] = None,
         resume_timeout: int = 60,
         loop: Optional[asyncio.AbstractEventLoop] = None,
-        session: Optional[aiohttp.ClientSession] = None,
         fallback: bool = False,
         get_player: Optional[Callable] = None,
         log_level: LogLevel = LogLevel.INFO,
@@ -90,7 +90,6 @@ class LavalinkWebsocket:
             f"{'wss' if self._secure else 'ws'}://{self._host}:{self._port}"
         )
 
-        self._session: aiohttp.ClientSession = session  # type: ignore
         self._loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
         self._websocket: client.WebSocketClientProtocol
         self._task: asyncio.Task = None  # type: ignore
