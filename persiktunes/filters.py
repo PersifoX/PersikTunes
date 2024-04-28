@@ -7,7 +7,7 @@ This module contains all the filters used in PersikTunes.
 import collections
 from typing import Any, Dict, List, Optional, Tuple
 
-from .exceptions import FilterInvalidArgument
+from .exceptions import FilterInvalidArgument, FilterTagAlreadyInUse, FilterTagInvalid
 
 
 class Filter:
@@ -524,3 +524,93 @@ class LowPass(Filter):
             return False
 
         return self.smoothing == __value.smoothing
+
+
+class Filters:
+    """Helper class for filters"""
+
+    def __init__(self) -> None:
+        self._filters: List[Filter] = []
+
+    @property
+    def has_preload(self) -> bool:
+        """Property which checks if any applied filters were preloaded"""
+        return any(f for f in self._filters if f.preload)
+
+    @property
+    def has_global(self) -> bool:
+        """Property which checks if any applied filters are global"""
+        return any(f for f in self._filters if f.preload == False)
+
+    @property
+    def empty(self) -> bool:
+        """Property which checks if the filter list is empty"""
+        return len(self._filters) == 0
+
+    def add_filter(self, *, filter: Filter) -> None:
+        """Adds a filter to the list of filters applied"""
+        if any(f for f in self._filters if f.tag == filter.tag):
+            raise FilterTagAlreadyInUse(
+                "A filter with that tag is already in use.",
+            )
+        self._filters.append(filter)
+
+    def remove_filter(self, *, filter_tag: str) -> None:
+        """Removes a filter from the list of filters applied using its filter tag"""
+        if not any(f for f in self._filters if f.tag == filter_tag):
+            raise FilterTagInvalid("A filter with that tag was not found.")
+
+        for index, filter in enumerate(self._filters):
+            if filter.tag == filter_tag:
+                del self._filters[index]
+
+    def edit_filter(self, *, filter_tag: str, to_apply: Filter) -> None:
+        """Edits a filter in the list of filters applied using its filter tag and replaces it with the new filter."""
+        if not any(f for f in self._filters if f.tag == filter_tag):
+            raise FilterTagInvalid("A filter with that tag was not found.")
+
+        for index, filter in enumerate(self._filters):
+            if filter.tag == filter_tag:
+                if not isinstance(filter, type(to_apply)):
+                    raise FilterInvalidArgument(
+                        "Edited filter is not the same type as the current filter.",
+                    )
+                if self._filters[index] == to_apply:
+                    raise FilterInvalidArgument(
+                        "Edited filter is the same as the current filter."
+                    )
+
+                if to_apply.tag != filter_tag:
+                    raise FilterInvalidArgument(
+                        "Edited filter tag is not the same as the current filter tag.",
+                    )
+
+                self._filters[index] = to_apply
+
+    def has_filter(self, *, filter_tag: str) -> bool:
+        """Checks if a filter exists in the list of filters using its filter tag"""
+        return any(f for f in self._filters if f.tag == filter_tag)
+
+    def has_filter_type(self, *, filter_type: Filter) -> bool:
+        """Checks if any filters applied match the specified filter type."""
+        return any(f for f in self._filters if isinstance(f, type(filter_type)))
+
+    def reset_filters(self) -> None:
+        """Removes all filters from the list"""
+        self._filters = []
+
+    def get_preload_filters(self) -> List[Filter]:
+        """Get all preloaded filters"""
+        return [f for f in self._filters if f.preload]
+
+    def get_all_payloads(self) -> Dict[str, Any]:
+        """Returns a formatted dict of all the filter payloads"""
+        payload: Dict[str, Any] = {}
+        for _filter in self._filters:
+            if _filter.payload:
+                payload.update(_filter.payload)
+        return payload
+
+    def get_filters(self) -> List[Filter]:
+        """Returns the current list of applied filters"""
+        return self._filters
