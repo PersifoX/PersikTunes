@@ -414,7 +414,7 @@ class DeletePlayerRequest(BaseRestRequest):
 class UpdateSessionRequest(BaseRestRequest):
     method: str = "PATCH"
     resuming: Optional[bool] = False
-    timeout: Optional[int] = None
+    timeout: Optional[int] = 60
 
 
 class UpdateSessionResponse(BaseRestResponse):
@@ -423,6 +423,10 @@ class UpdateSessionResponse(BaseRestResponse):
 
 
 class GetLavalinkVersionRequest(BaseRestRequest):
+    method: str = "GET"
+
+
+class GetTracksRequest(BaseRestRequest):
     method: str = "GET"
 
 
