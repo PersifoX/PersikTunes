@@ -10,10 +10,8 @@ import time
 from typing import Any, Dict, Optional
 
 from disnake import Client, Guild, VoiceChannel, VoiceProtocol
-from disnake.ext import commands
 
 from . import events
-from .enums import SearchType
 from .events import PersikEvent, TrackEndEvent, TrackStartEvent
 from .exceptions import TrackInvalidPosition, TrackLoadError
 from .filters import Filter, Filters, Timescale
