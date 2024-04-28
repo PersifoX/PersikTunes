@@ -8,17 +8,13 @@ from __future__ import annotations
 
 import random
 from copy import copy
-from typing import Iterable
-from typing import Iterator
-from typing import List
-from typing import Optional
-from typing import Union
+from typing import Iterable, Iterator, List, Optional, Union
 
 from .enums import LoopMode
-from .exceptions import QueueEmpty
-from .exceptions import QueueException
-from .exceptions import QueueFull
-from .objects import Track
+from .exceptions import QueueEmpty, QueueException, QueueFull
+
+# from .objects import Track
+from .models import Track
 
 
 class Queue(Iterable[Track]):
@@ -30,13 +26,41 @@ class Queue(Iterable[Track]):
         *,
         overflow: bool = True,
         return_exceptions: bool = False,
+        loose_mode: bool = False,
     ):
+        """
+        ### Init method:
+
+        ```py
+        self.max_size: Optional[int] "max size of the queue"
+        self._current_item: Optional[Track] "current item in the queue"
+        self._queue: List[Track] "list of items in the queue"
+        self._overflow: bool "if True, allows queue to grow beyond max_size"
+        self._loop_mode: Optional[LoopMode] "One of None, LoopMode.QUEUE, LoopMode.TRACK"
+        self._return_exceptions: bool "if True, exceptions will raised instead of returning None (in some cases)"
+        self._primary: Optional[Track] "Primary track. After track ends, queue will be resumed"
+        self._loose_mode: bool "If True, queue will not stop when track ends"
+        ```
+        """
         self.max_size: Optional[int] = max_size
+        "max size of the queue"
         self._current_item: Optional[Track] = None
+        "current item in the queue"
         self._queue: List[Track] = []
+        "list of items in the queue"
         self._overflow: bool = overflow
+        "if True, allows queue to grow beyond max_size"
         self._loop_mode: Optional[LoopMode] = None
+        "One of None, LoopMode.QUEUE, LoopMode.TRACK"
         self._return_exceptions: bool = return_exceptions
+        "if True, exceptions will raised instead of returning None (in some cases)"
+        self._primary: Optional[Track] = None
+        "Primary track. After track ends, queue will be resumed"
+        self._loose_mode: bool = loose_mode
+        "If True, queue will not stop when track ends"
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Overwritten iterable methods
 
     def __str__(self) -> str:
         """String showing all Track objects appearing as a list."""
@@ -117,9 +141,15 @@ class Queue(Iterable[Track]):
             self.extend(other)
             return self
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Private methods
 
     def _get(self) -> Track:
-        return self._queue.pop(0)
+        return (
+            self._queue.pop(0)
+            if self._loop_mode
+            else self._queue[self._index(self._current_item) + 1]
+        )
 
     def _drop(self) -> Track:
         return self._queue.pop()
@@ -145,6 +175,9 @@ class Queue(Iterable[Track]):
 
         return self._queue[item]
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # static methods
+
     @staticmethod
     def _check_track(item: Track) -> Track:
         if not isinstance(item, Track):
@@ -159,6 +192,9 @@ class Queue(Iterable[Track]):
             cls._check_track(item)
 
         return iterable
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # properties
 
     @property
     def count(self) -> int:
@@ -189,6 +225,9 @@ class Queue(Iterable[Track]):
     def size(self) -> int:
         """Returns the amount of items in the queue"""
         return len(self._queue)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # public methods
 
     def get_queue(self) -> List:
         """Returns the queue as a List"""
