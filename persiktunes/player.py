@@ -7,122 +7,40 @@ This module contains all the player used in PersikTunes.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
-from disnake import Client, ClientUser, Guild, Member, User, VoiceChannel, VoiceProtocol
+from disnake import Client, Guild, VoiceChannel, VoiceProtocol
 from disnake.ext import commands
 
 from . import events
 from .enums import SearchType
 from .events import PersikEvent, TrackEndEvent, TrackStartEvent
-from .exceptions import (
-    FilterInvalidArgument,
-    FilterTagAlreadyInUse,
-    FilterTagInvalid,
-    TrackInvalidPosition,
-    TrackLoadError,
-)
-from .filters import Filter, Timescale
-from .objects import Playlist, Track
+from .exceptions import TrackInvalidPosition, TrackLoadError
+from .filters import Filter, Filters, Timescale
+
+# from .objects import Playlist, Track
+from .models import Track, UpdatePlayerRequest, UpdatePlayerTrack
 from .pool import Node, NodePool
 from .utils import LavalinkVersion
 
 
-class Filters:
-    """Helper class for filters"""
-
-    def __init__(self) -> None:
-        self._filters: List[Filter] = []
-
-    @property
-    def has_preload(self) -> bool:
-        """Property which checks if any applied filters were preloaded"""
-        return any(f for f in self._filters if f.preload)
-
-    @property
-    def has_global(self) -> bool:
-        """Property which checks if any applied filters are global"""
-        return any(f for f in self._filters if f.preload == False)
-
-    @property
-    def empty(self) -> bool:
-        """Property which checks if the filter list is empty"""
-        return len(self._filters) == 0
-
-    def add_filter(self, *, filter: Filter) -> None:
-        """Adds a filter to the list of filters applied"""
-        if any(f for f in self._filters if f.tag == filter.tag):
-            raise FilterTagAlreadyInUse(
-                "A filter with that tag is already in use.",
-            )
-        self._filters.append(filter)
-
-    def remove_filter(self, *, filter_tag: str) -> None:
-        """Removes a filter from the list of filters applied using its filter tag"""
-        if not any(f for f in self._filters if f.tag == filter_tag):
-            raise FilterTagInvalid("A filter with that tag was not found.")
-
-        for index, filter in enumerate(self._filters):
-            if filter.tag == filter_tag:
-                del self._filters[index]
-
-    def edit_filter(self, *, filter_tag: str, to_apply: Filter) -> None:
-        """Edits a filter in the list of filters applied using its filter tag and replaces it with the new filter."""
-        if not any(f for f in self._filters if f.tag == filter_tag):
-            raise FilterTagInvalid("A filter with that tag was not found.")
-
-        for index, filter in enumerate(self._filters):
-            if filter.tag == filter_tag:
-                if not isinstance(filter, type(to_apply)):
-                    raise FilterInvalidArgument(
-                        "Edited filter is not the same type as the current filter.",
-                    )
-                if self._filters[index] == to_apply:
-                    raise FilterInvalidArgument(
-                        "Edited filter is the same as the current filter."
-                    )
-
-                if to_apply.tag != filter_tag:
-                    raise FilterInvalidArgument(
-                        "Edited filter tag is not the same as the current filter tag.",
-                    )
-
-                self._filters[index] = to_apply
-
-    def has_filter(self, *, filter_tag: str) -> bool:
-        """Checks if a filter exists in the list of filters using its filter tag"""
-        return any(f for f in self._filters if f.tag == filter_tag)
-
-    def has_filter_type(self, *, filter_type: Filter) -> bool:
-        """Checks if any filters applied match the specified filter type."""
-        return any(f for f in self._filters if isinstance(f, type(filter_type)))
-
-    def reset_filters(self) -> None:
-        """Removes all filters from the list"""
-        self._filters = []
-
-    def get_preload_filters(self) -> List[Filter]:
-        """Get all preloaded filters"""
-        return [f for f in self._filters if f.preload]
-
-    def get_all_payloads(self) -> Dict[str, Any]:
-        """Returns a formatted dict of all the filter payloads"""
-        payload: Dict[str, Any] = {}
-        for _filter in self._filters:
-            if _filter.payload:
-                payload.update(_filter.payload)
-        return payload
-
-    def get_filters(self) -> List[Filter]:
-        """Returns the current list of applied filters"""
-        return self._filters
-
-
 class Player(VoiceProtocol):
-    """The base player class for PersikTunes.
-    In order to initiate a player, you must pass it in as a cls when you connect to a channel.
-    i.e: ```py
-    await ctx.author.voice.channel.connect(cls=PersikTunes.Player)
+    """The base player class for PersikTunes.\n
+    In order to initiate a player, you must pass it in as a cls when you connect to a channel.\n
+    i.e:
+
+    ```py
+    await ctx.author.voice.channel.connect(cls=persiktunes.Player)
+    ```
+    Or use `connect` function:
+
+    ```py
+    player = persiktunes.Player(
+        client,
+        ctx.author.voice.channel
+    )
+
+    await player.connect()
     ```
     """
 
@@ -160,6 +78,13 @@ class Player(VoiceProtocol):
         self._voice_state: dict = {}
 
         self._player_endpoint_uri: str = f"sessions/{self._node._session_id}/players"
+
+        self.rest = self._node.rest
+
+        self.search = self.rest.search
+        self.get_recommendations = self.rest.get_recommendations
+        self.decode_track = self.rest.decode_track
+        self.decode_tracks = self.rest.decode_tracks
 
     def __repr__(self) -> str:
         return (
@@ -257,6 +182,9 @@ class Player(VoiceProtocol):
         """
         return self.guild.id not in self._node._players
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Private methods
+
     def _adjust_end_time(self) -> Optional[str]:
         if self._node._version >= LavalinkVersion(3, 7, 5):
             return None
@@ -284,9 +212,7 @@ class Player(VoiceProtocol):
             "sessionId": state["sessionId"],
         }
 
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
+        await self.rest.update_player(
             guild_id=self._guild.id,
             data={"voice": data},
         )
@@ -352,74 +278,29 @@ class Player(VoiceProtocol):
         # reassign uri to update session id
         await self._refresh_endpoint_uri(new_node._session_id)
         await self._dispatch_voice_update()
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
+        await self.rest.update_player(
             guild_id=self._guild.id,
-            data=data or None,
+            data=data or {},
         )
 
         self._log.debug(f"Swapped all players to new node {new_node._identifier}.")
 
-    async def get_tracks(
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Sugar methods
+
+    async def search(
         self,
-        query: str,
-        *,
-        ctx: Optional[commands.Context] = None,
-        requester: Optional[Union[Member, User, ClientUser]] = None,
-        search_type: SearchType = SearchType.spsearch,
-        filters: Optional[List[Filter]] = None,
-    ) -> Optional[Union[List[Track], Playlist]]:
-        """Fetches tracks from the node's REST api to parse into Lavalink.
+        *args,
+        **kwargs,
+    ) -> Any:
+        return await self.rest.search(*args, **kwargs)
 
-        If you passed in Spotify API credentials when you created the node,
-        you can also pass in a Spotify URL of a playlist, album or track and it will be parsed
-        accordingly.
-
-        You can pass in a disnake Context object to get a
-        Context object on any track you search.
-
-        You may also pass in a List of filters
-        to be applied to your track once it plays.
-        """
-        return await self._node.get_tracks(
-            query,
-            ctx=ctx,
-            requester=requester,
-            search_type=search_type,
-            filters=filters,
-        )
-
-    async def build_track(
-        self, identifier: str, ctx: Optional[commands.Context] = None
-    ) -> Track:
-        """
-        Builds a track using a valid track identifier
-
-        You can also pass in a disnake Context object to get a
-        Context object on the track it builds.
-        """
-
-        return await self._node.build_track(identifier, ctx=ctx)
-
-    async def get_recommendations(
-        self,
-        *,
-        track: Track,
-        ctx: Optional[commands.Context] = None,
-    ) -> Optional[Union[List[Track], Playlist]]:
-        """
-        Gets recommendations from either YouTube or Spotify.
-        You can pass in a disnake Context object to get a
-        Context object on all tracks that get recommended.
-        """
-        return await self._node.get_recommendations(track=track, ctx=ctx)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Public methods
 
     async def connect(
         self,
         *,
-        timeout: float,
-        reconnect: bool,
         self_deaf: bool = True,
         self_mute: bool = False,
     ) -> None:
@@ -434,9 +315,7 @@ class Player(VoiceProtocol):
     async def stop(self) -> None:
         """Stops the currently playing track."""
         self._current = None
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
+        await self.rest.update_player(
             guild_id=self._guild.id,
             data={"encodedTrack": None},
         )
@@ -463,11 +342,7 @@ class Player(VoiceProtocol):
 
         self._node._players.pop(self.guild.id)
         if self.node.is_connected:
-            await self._node.send(
-                method="DELETE",
-                path=self._player_endpoint_uri,
-                guild_id=self._guild.id,
-            )
+            await self.rest.destroy_player(guild_id=self._guild.id)
 
         self._log.debug("Player has been destroyed.")
 
@@ -475,58 +350,27 @@ class Player(VoiceProtocol):
         self,
         track: Track,
         *,
-        start: int = 0,
-        end: int = 0,
-        ignore_if_playing: bool = False,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        noReplace: bool = True,
+        volume: Optional[int] = None,
     ) -> Track:
         """Plays a track. If a Spotify track is passed in, it will be handled accordingly."""
 
-        # Make sure we've never searched the track before
-        if track.original is None:
-            # First lets try using the tracks ISRC, every track has one
-            # (hopefully)
-            try:
-                if not track.isrc:
-                    # We have to bare raise here because theres no other way to
-                    # skip this block feasibly
-                    raise
-                search = (
-                    await self._node.get_tracks(
-                        f"{track._search_type}:{track.isrc}", ctx=track.ctx
-                    )
-                )[
-                    0
-                ]  # type: ignore
-            except Exception:
-                # First method didn't work, lets try just searching it up
-                try:
-                    search = (
-                        await self._node.get_tracks(
-                            f"{track._search_type}:{track.title} - {track.author}",
-                            ctx=track.ctx,
-                        )
-                    )[
-                        0
-                    ]  # type: ignore
-                except BaseException:
-                    # The song wasn't able to be found, raise error
-                    raise TrackLoadError(
-                        "No equivalent track was able to be found.",
-                    )
-            data = {
-                "encodedTrack": search.track_id,
-                "position": str(start),
-                "endTime": self._adjust_end_time(),
-            }
-            track.original = search
-            track.track_id = search.track_id
-            # Set track_id for later lavalink searches
-        else:
-            data = {
-                "encodedTrack": track.track_id,
-                "position": str(start),
-                "endTime": self._adjust_end_time(),
-            }
+        data = UpdatePlayerRequest(
+            noReplase=noReplace,
+            track=UpdatePlayerTrack(
+                encoded=track.encoded,
+                identifier=track.identifier,
+                userData=track,
+            ),
+            position=start,
+            endTime=end,
+            volume=volume or self.volume,
+            pause=False,
+        )
+
+        self._paused = False
 
         # Lets set the current track before we play it so any
         # corresponding events can capture it correctly
@@ -555,16 +399,7 @@ class Player(VoiceProtocol):
         # If it isnt zero, it'll be set to None.
         # Otherwise, it'll be set here:
 
-        if end > 0:
-            data["endTime"] = str(end)
-
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data=data,
-            query=f"noReplace={ignore_if_playing}",
-        )
+        await self.rest.update_player(guild_id=self._guild.id, data=data)
 
         self._log.debug(
             f"Playing {track.title} from uri {track.uri} with a length of {track.length}",
@@ -582,9 +417,14 @@ class Player(VoiceProtocol):
                 "Seek position must be between 0 and the track length",
             )
 
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
+        # await self._node.send(
+        #     method="PATCH",
+        #     path=self._player_endpoint_uri,
+        #     guild_id=self._guild.id,
+        #     data={"position": int(position)},
+        # )
+
+        await self.rest.update_player(
             guild_id=self._guild.id,
             data={"position": int(position)},
         )
@@ -592,30 +432,38 @@ class Player(VoiceProtocol):
         self._log.debug(f"Seeking to {position}.")
         return self.position
 
-    async def set_pause(self, pause: bool) -> bool:
+    async def set_pause(self, pause: Optional[bool] = None) -> bool:
         """Sets the pause state of the currently playing track."""
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
+        # await self._node.send(
+        #     method="PATCH",
+        #     path=self._player_endpoint_uri,
+        #     guild_id=self._guild.id,
+        #     data={"paused": pause or not self._paused},
+        # )
+        await self.rest.update_player(
             guild_id=self._guild.id,
-            data={"paused": pause},
+            data={"paused": pause or not self._paused},
         )
-        self._paused = pause
+
+        self._paused = pause or not self._paused
 
         self._log.debug(f"Player has been {'paused' if pause else 'resumed'}.")
         return self._paused
 
     async def set_volume(self, volume: int) -> int:
         """Sets the volume of the player as an integer. Lavalink accepts values from 0 to 500."""
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data={"volume": int(volume)},
-        )
-        self._volume = int(volume)
+        # await self._node.send(
+        #     method="PATCH",
+        #     path=self._player_endpoint_uri,
+        #     guild_id=self._guild.id,
+        #     data={"volume": int(volume)},
+        # )
 
-        self._log.debug(f"Player volume has been adjusted to {int(volume)}")
+        await self.rest.update_player(guild_id=self._guild.id, data={"volume": volume})
+
+        self._volume = volume
+
+        self._log.debug(f"Player volume has been adjusted to {volume}")
         return self._volume
 
     async def move_to(self, channel: VoiceChannel) -> None:
@@ -623,11 +471,13 @@ class Player(VoiceProtocol):
 
         await self.guild.change_voice_state(channel=channel)
 
+        self._voice_state["channel_id"] = channel.id
+
         self.channel = channel
 
         await self._dispatch_voice_update()
 
-    async def add_filter(self, _filter: Filter, fast_apply: bool = False) -> Filters:
+    async def add_filter(self, _filter: Filter) -> Filters:
         """Adds a filter to the player. Takes a PersikTunes.Filter object.
         This will only work if you are using a version of Lavalink that supports filters.
         If you would like for the filter to apply instantly, set the `fast_apply` arg to `True`.
@@ -636,22 +486,29 @@ class Player(VoiceProtocol):
         """
 
         self._filters.add_filter(filter=_filter)
+
         payload = self._filters.get_all_payloads()
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data={"filters": payload},
-        )
+
+        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+
+        await self.seek(self.position)  # TODO: Find a better way to do this
 
         self._log.debug(f"Filter has been applied to player with tag {_filter.tag}")
-        if fast_apply:
-            self._log.debug(f"Fast apply passed, now applying filter instantly.")
-            await self.seek(self.position)
+        # await self._node.send(
+        #     method="PATCH",
+        #     path=self._player_endpoint_uri,
+        #     guild_id=self._guild.id,
+        #     data={"filters": payload},
+        # )
+
+        # self._log.debug(f"Filter has been applied to player with tag {_filter.tag}")
+        # if fast_apply:
+        #     self._log.debug(f"Fast apply passed, now applying filter instantly.")
+        #     await self.seek(self.position)
 
         return self._filters
 
-    async def remove_filter(self, filter_tag: str, fast_apply: bool = False) -> Filters:
+    async def remove_filter(self, filter_tag: str) -> Filters:
         """Removes a filter from the player. Takes a filter tag.
         This will only work if you are using a version of Lavalink that supports filters.
         If you would like for the filter to apply instantly, set the `fast_apply` arg to `True`.
@@ -661,26 +518,16 @@ class Player(VoiceProtocol):
 
         self._filters.remove_filter(filter_tag=filter_tag)
         payload = self._filters.get_all_payloads()
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data={"filters": payload},
-        )
+
+        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+
+        await self.seek(self.position)  # TODO: Find a better way to do this
+
         self._log.debug(f"Filter has been removed from player with tag {filter_tag}")
-        if fast_apply:
-            self._log.debug(f"Fast apply passed, now removing filter instantly.")
-            await self.seek(self.position)
 
         return self._filters
 
-    async def edit_filter(
-        self,
-        *,
-        filter_tag: str,
-        edited_filter: Filter,
-        fast_apply: bool = False,
-    ) -> Filters:
+    async def edit_filter(self, *, filter_tag: str, edited_filter: Filter) -> Filters:
         """Edits a filter from the player using its filter tag and a new filter of the same type.
         The filter to be replaced must have the same tag as the one you are replacing it with.
         This will only work if you are using a version of Lavalink that supports filters.
@@ -692,22 +539,18 @@ class Player(VoiceProtocol):
 
         self._filters.edit_filter(filter_tag=filter_tag, to_apply=edited_filter)
         payload = self._filters.get_all_payloads()
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data={"filters": payload},
-        )
+
+        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+
+        await self.seek(self.position)  # TODO: Find a better way to do this
+
         self._log.debug(
             f"Filter with tag {filter_tag} has been edited to {edited_filter!r}"
         )
-        if fast_apply:
-            self._log.debug(f"Fast apply passed, now editing filter instantly.")
-            await self.seek(self.position)
 
         return self._filters
 
-    async def reset_filters(self, *, fast_apply: bool = False) -> None:
+    async def reset_filters(self) -> None:
         """Resets all currently applied filters to their default parameters.
          You must have filters applied in order for this to work.
          If you would like the filters to be removed instantly, set the `fast_apply` arg to `True`.
@@ -716,18 +559,16 @@ class Player(VoiceProtocol):
         """
 
         if not self._filters:
-            raise FilterInvalidArgument(
-                "You must have filters applied first in order to use this method.",
+            # raise FilterInvalidArgument(
+            #     "You must have filters applied first in order to use this method.",
+            # )
+            return self._log.warn(
+                "You don't have any filters applied. Nothing to reset."
             )
-        self._filters.reset_filters()
-        await self._node.send(
-            method="PATCH",
-            path=self._player_endpoint_uri,
-            guild_id=self._guild.id,
-            data={"filters": {}},
-        )
-        self._log.debug(f"All filters have been removed from player.")
 
-        if fast_apply:
-            self._log.debug(f"Fast apply passed, now removing all filters instantly.")
-            await self.seek(self.position)
+        self._filters.reset_filters()
+        self.rest.update_player(guild_id=self._guild.id, data={"filters": {}})
+
+        await self.seek(self.position)  # TODO: Find a better way to do this
+
+        self._log.debug(f"All filters have been removed from player.")
