@@ -166,9 +166,6 @@ class Queue(Iterable[Track]):
     def _remove(self, item: Track) -> None:
         self._queue.remove(item)
 
-    def _get_random_float(self) -> float:
-        return random.random()
-
     def _get_item(self, item: Union[Track, int]) -> Track:
         if isinstance(item, Track):
             return item
@@ -222,9 +219,19 @@ class Queue(Iterable[Track]):
         return self._loop_mode
 
     @property
+    def loose_mode(self) -> bool:
+        """Returns True if the loose_mode enabled or the queue"""
+        return self._loose_mode
+
+    @property
     def size(self) -> int:
         """Returns the amount of items in the queue"""
         return len(self._queue)
+
+    @property
+    def primary(self) -> Optional[Track]:
+        """Returns the primary item of the queue"""
+        return self._primary
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # public methods
@@ -234,7 +241,7 @@ class Queue(Iterable[Track]):
         return self._queue
 
     def get(self) -> Track:
-        """Alias for `next()` with additional check LoopMode"""
+        """Alias for `next()` with additional check LoopMode, primary and loose_mode."""
 
         if self._loop_mode == LoopMode.TRACK and self._current_item:
             return self._current_item
@@ -251,20 +258,14 @@ class Queue(Iterable[Track]):
             else:
                 return
 
-        if not self._current_item or self._current_item not in self._queue:
-            self._current_item = self._queue[0]
+        try:
+            self._current_item = self._get()
 
-        elif self.find_position(self._current_item) == self.count - 1:
-            if self._loop_mode == LoopMode.QUEUE:
+        except:
+            if self._loop_mode.value == "queue":
                 self._current_item = self._queue[0]
 
-            else:
-                return self._queue.clear()
-
-        else:
-            self._current_item = self._queue[self.find_position(self._current_item) + 1]
-
-        return self._current_item
+                return self._current_item
 
     def prev(self):
         """Return prevision immediately available item in queue if any.
@@ -348,10 +349,33 @@ class Queue(Iterable[Track]):
 
     def put_at_front(self, item: Track) -> None:
         """Put the given item into the front of the queue."""
+        if self.is_full:
+            if not self._overflow:
+                if self._return_exceptions:
+                    raise QueueFull(
+                        f"Queue max_size of {self.max_size} has been reached.",
+                    )
+                else:
+                    return
+
+            self._drop()
+
         return self.put_at_index(0, item)
 
     def put_list(self, item: List[Track]) -> None:
         """Put the given list into the back of the queue."""
+        if self.is_full:
+            if not self._overflow:
+                if self._return_exceptions:
+                    raise QueueFull(
+                        f"Queue max_size of {self.max_size} has been reached.",
+                    )
+                else:
+                    return
+
+            for _ in range(item.__len__()):
+                self._drop()
+
         [self._check_track(track) for track in item]
         self._queue += item
 
@@ -391,33 +415,12 @@ class Queue(Iterable[Track]):
         """Remove all items from the queue."""
         self._queue.clear()
 
-    def set_loop_mode(self, mode: LoopMode) -> None:
+    def set_loop_mode(self, mode: LoopMode | None) -> None:
         """
         Sets the loop mode of the queue.
         Takes the LoopMode enum as an argument.
         """
         self._loop_mode = mode
-        if self._loop_mode == LoopMode.QUEUE:
-            try:
-                index = self._index(self._current_item)
-            except ValueError:
-                index = 0
-            if self._current_item not in self._queue:
-                self._queue.insert(index, self._current_item)
-            self._current_item = self._queue[index]
-
-    def disable_loop(self) -> None:
-        """
-        Disables loop mode if set.
-        Raises QueueException if loop mode is already None.
-        """
-        if not self._loop_mode:
-            if self._return_exceptions:
-                raise QueueException("Queue loop is already disabled.")
-            else:
-                return
-
-        self._loop_mode = None
 
     def shuffle(self) -> None:
         """Shuffles the queue."""
@@ -433,7 +436,7 @@ class Queue(Iterable[Track]):
 
     def jump(self, item: Union[Track, int]) -> Track:
         """
-        Jumps to the item specified in the queue.
+        Jumps to the item specified in the queue from the current position.
         """
         if self._loop_mode == LoopMode.TRACK:
             if self._return_exceptions:
@@ -470,3 +473,9 @@ class Queue(Iterable[Track]):
         if item in self._queue:
             self._remove(item)
             self._insert(index, item)
+
+    def set_primary(self, item: Track) -> None:
+        """
+        Set the primary item of the queue.
+        """
+        self._primary = self._check_track(item)
