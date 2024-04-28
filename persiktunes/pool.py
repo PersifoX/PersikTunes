@@ -12,15 +12,27 @@ import random
 import re
 from os import path
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Type,
+    Union,
+)
 from urllib.parse import quote
 
 import aiohttp
+import typing_extensions
 from disnake import Client, ClientUser, Interaction, Member, User
 from disnake.ext import commands
 from spotipy.oauth2 import SpotifyClientCredentials
 
 from . import __version__
+from .clients.rest import LavalinkRest
 from .clients.ws import LavalinkWebsocket
 from .enums import *
 from .enums import LogLevel
@@ -34,9 +46,7 @@ from .exceptions import (
 )
 from .filters import Filter
 from .models.restapi import Playlist, Track
-from .objects import Playlist, Track
 from .routeplanner import RoutePlanner
-from .search.builtin import BuiltIn
 from .utils import LavalinkVersion, NodeStats, Ping
 
 if TYPE_CHECKING:
@@ -70,6 +80,7 @@ class Node:
         spotify_credentials: Optional[SpotifyClientCredentials] = None,
         log_level: LogLevel = LogLevel.INFO,
         log_handler: Optional[logging.Handler] = None,
+        setup_logging: Optional[Callable] = None,
     ):
         if not isinstance(port, int):
             raise TypeError("Port must be an integer")
@@ -88,6 +99,9 @@ class Node:
         self._spotify_credentials: Optional[SpotifyClientCredentials] = (
             spotify_credentials
         )
+
+        self._setup_logging = setup_logging or self._setup_logging
+
         self._log_level: LogLevel = log_level
         self._log_handler = log_handler
 
@@ -106,18 +120,10 @@ class Node:
         self._route_planner = RoutePlanner(self)
         self._log = self._setup_logging(self._log_level)
 
-        self.external = BuiltIn(spotify_credentials=spotify_credentials)
-
         if not self._bot.user:
             raise NodeCreationError("Bot user is not ready yet.")
 
         self._bot_user = self._bot.user
-
-        self._headers = {
-            "Authorization": self._password,
-            "User-Id": str(self._bot_user.id),
-            "Client-Name": f"PersikTunes/{__version__}",
-        }
 
         self._players: Dict[int, Player] = {}
 
@@ -134,6 +140,22 @@ class Node:
             loop,
             session,
             fallback,
+            log_level=log_level,
+            setup_logging=self._setup_logging,
+        )
+
+        self._rest: LavalinkRest = LavalinkRest(
+            self,
+            self._host,
+            self._port,
+            self._password,
+            self._bot.user.id,
+            secure,
+            loop,
+            session,
+            fallback,
+            log_level=log_level,
+            setup_logging=self._setup_logging,
         )
 
     def __repr__(self) -> str:
@@ -168,7 +190,7 @@ class Node:
         return len(self.players.values())
 
     @property
-    def pool(self) -> Type[NodePool]:
+    def pool(self) -> NodePool:
         """Property which returns the pool this node is apart of"""
         return self._pool
 
@@ -181,6 +203,11 @@ class Node:
     def ping(self) -> float:
         """Alias for `Node.latency`, returns the latency of the node"""
         return self.latency
+
+    @property
+    def rest(self) -> LavalinkRest:
+        """Property which returns the LavalinkRest object"""
+        return self._rest
 
     def _setup_logging(self, level: LogLevel) -> logging.Logger:
         logger = logging.getLogger("PersikTunes")
@@ -260,6 +287,7 @@ class Node:
             data=data,
         )
 
+    @typing_extensions.deprecated("This method is deprecated; use `rest.send` instead.")
     async def send(
         self,
         method: Literal["GET", "POST", "PATCH", "PUT", "DELETE"],
@@ -319,6 +347,9 @@ class Node:
         """Takes a guild ID as a parameter. Returns a PersikTunes Player object or None."""
         return self._players.get(guild_id, None)
 
+    @typing_extensions.deprecated(
+        "This method is deprecated; use `rest.build_track` instead."
+    )
     async def build_track(
         self,
         identifier: str,
@@ -339,7 +370,10 @@ class Node:
 
         return Track.model_validate(data, context={"ctx": ctx})
 
-    async def get_tracks(
+    @typing_extensions.deprecated(
+        "This method is deprecated; use `rest.search` instead."
+    )
+    async def search(
         self,
         query: str,
         *,
@@ -510,6 +544,9 @@ class Node:
                 "There was an error while trying to load this track.",
             )
 
+    @typing_extensions.deprecated(
+        "This method is deprecated; use `rest.get_recommendations` instead."
+    )
     async def get_recommendations(
         self,
         *,
@@ -536,7 +573,7 @@ class Node:
             for param in kwargs:
                 query += f"&{param}={kwargs.get(param) if type(kwargs.get(param)) == str else ','.split(kwargs.get(param))}"
 
-            return await self.get_tracks(
+            return await self.search(
                 query=query, ctx=ctx or track.ctx, requester=requester
             )
 
@@ -555,7 +592,7 @@ class Node:
             for song in query:
                 tracks.append(
                     (
-                        await self.get_tracks(
+                        await self.search(
                             f"https://music.youtube.com/watch?v={song['videoId']}",
                             ctx=ctx,
                             requester=requester,
