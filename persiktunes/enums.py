@@ -5,8 +5,7 @@ This module contains all the enums used in PersikTunes.
 """
 
 import re
-from enum import Enum
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 
 class SearchType(Enum):
@@ -297,11 +296,11 @@ class URLRegex:
         r"^(https?:\/\/)?(www.)?(m\.)?soundcloud\.com/[a-zA-Z0-9-._]+/[a-zA-Z0-9-._]+(\?in)",
     )
 
-    LAVALINK_SEARCH = re.compile(r"^(yt|ytm|sc|sp|dz|am)search:")
+    LAVALINK_SEARCH = re.compile(r"^(yt|ytm|sc|sp|dz|am)search:.*$")
 
-    LAVALINK_REC = re.compile(r"^(yt|ytm|sc|sp|dz|am)rec:")
+    LAVALINK_REC = re.compile(r"^(yt|ytm|sc|sp|dz|am)rec:.*$")
 
-    LAVALINK_TTS = re.compile(r"^ftts:")
+    LAVALINK_TTS = re.compile(r"^ftts:.*$")
 
     BASE_URL = re.compile(r"https?://(?:www\.)?.+")
 
