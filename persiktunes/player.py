@@ -7,17 +7,17 @@ This module contains all the player used in PersikTunes.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from disnake import Client, Guild, VoiceChannel, VoiceProtocol
 
 from . import events
-from .events import PersikEvent, TrackEndEvent, TrackStartEvent
-from .exceptions import TrackInvalidPosition, TrackLoadError
+from .exceptions import TrackInvalidPosition
 from .filters import Filter, Filters, Timescale
 
 # from .objects import Playlist, Track
-from .models import Track, UpdatePlayerRequest, UpdatePlayerTrack
+from .models import PlayerUpdateOP, Track, UpdatePlayerRequest, UpdatePlayerTrack
+from .models.ws import *
 from .pool import Node, NodePool
 from .utils import LavalinkVersion
 
@@ -70,7 +70,6 @@ class Player(VoiceProtocol):
 
         self._last_position: int = 0
         self._last_update: float = 0
-        self._ending_track: Optional[Track] = None
         self._log = self._node._log
 
         self._voice_state: dict = {}
@@ -80,7 +79,7 @@ class Player(VoiceProtocol):
         self.rest = self._node.rest
 
         self.search = self.rest.search
-        self.get_recommendations = self.rest.get_recommendations
+        self.recommendations = self.rest.recommendations
         self.decode_track = self.rest.decode_track
         self.decode_tracks = self.rest.decode_tracks
 
@@ -99,12 +98,12 @@ class Player(VoiceProtocol):
         current: Track = self._current  # type: ignore
 
         if self.is_paused:
-            return min(self._last_position, current.length)
+            return min(self._last_position, current.info.length)
 
         difference = (time.time() * 1000) - self._last_update
         position = self._last_position + difference
 
-        return min(position, current.length)
+        return min(position, current.info.length)
 
     @property
     def rate(self) -> float:
@@ -126,12 +125,12 @@ class Player(VoiceProtocol):
         if not self.is_playing:
             return 0
 
-        return self.current.length / self.rate  # type: ignore
+        return self.current.info.length / self.rate  # type: ignore
 
     @property
     def is_playing(self) -> bool:
         """Property which returns whether or not the player is actively playing a track."""
-        return self._is_connected and self._current is not None
+        return self._is_connected and self._current
 
     @property
     def is_connected(self) -> bool:
@@ -189,26 +188,30 @@ class Player(VoiceProtocol):
 
         return "0"
 
-    async def _update_state(self, data: dict) -> None:
-        state: dict = data.get("state", {})
-        self._last_update = int(state.get("time", 0))
-        self._is_connected = bool(state.get("connected"))
-        self._last_position = int(state.get("position", 0))
-        self._log.debug(f"Got player update state with data {state}")
+    async def _update_state(self, data: PlayerUpdateOP) -> None:
+        self._last_update = data.state.time
+        self._is_connected = data.state.connected or self._is_connected
+        self._last_position = data.state.position
+        self._ping = data.state.ping
+        self._log.debug(
+            f"Got player update state with PlayerUpdateOP {data.model_dump()}"
+        )
 
     async def _dispatch_voice_update(
         self, voice_data: Optional[Dict[str, Any]] = None
     ) -> None:
-        if {"sessionId", "event"} != self._voice_state.keys():
-            return
 
         state = voice_data or self._voice_state
 
-        data = {
-            "token": state["event"]["token"],
-            "endpoint": state["event"]["endpoint"],
-            "sessionId": state["sessionId"],
-        }
+        data = (
+            {
+                "token": state["event"]["token"],
+                "endpoint": state["event"]["endpoint"],
+                "sessionId": state["sessionId"],
+            }
+            if state
+            else None
+        )
 
         await self.rest.update_player(
             guild_id=self._guild.id,
@@ -243,22 +246,28 @@ class Player(VoiceProtocol):
 
         await self._dispatch_voice_update({**self._voice_state, "event": data})
 
-    async def _dispatch_event(self, data: dict) -> None:
-        event_type: str = data["type"]
-        event: PersikEvent = getattr(events, event_type)(data, self)
+    async def _dispatch_event(
+        self,
+        event: Union[
+            TrackEndEvent,
+            TrackStartEvent,
+            TrackStuckEvent,
+            TrackExceptionEvent,
+            WebSocketClosedEvent,
+            Any,
+        ],
+    ) -> None:
+        event_type: str = event.__class__.__name__
+        ds_event: events.PersikEvent = getattr(events, event_type)(
+            event.model_dump(), self
+        )
 
-        if isinstance(event, TrackEndEvent) and event.reason not in (
-            "REPLACED",
-            "replaced",
-        ):
+        if isinstance(event, TrackEndEvent) and event.reason != "replaced":
             self._current = None
 
-        event.dispatch(self._bot)
+        ds_event.dispatch(self._bot)
 
-        if isinstance(event, TrackStartEvent):
-            self._ending_track = self._current
-
-        self._log.debug(f"Dispatched event {data['type']} to player.")
+        self._log.debug(f"Dispatched event {event_type} ({ds_event}) to player.")
 
     async def _refresh_endpoint_uri(self, session_id: Optional[str]) -> None:
         self._player_endpoint_uri = f"sessions/{session_id}/players"
@@ -267,7 +276,7 @@ class Player(VoiceProtocol):
         if self.current:
             data: dict = {
                 "position": self.position,
-                "encodedTrack": self.current.track_id,
+                "encodedTrack": self.current.encoded,
             }
 
         del self._node._players[self._guild.id]
@@ -284,21 +293,13 @@ class Player(VoiceProtocol):
         self._log.debug(f"Swapped all players to new node {new_node._identifier}.")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Sugar methods
-
-    async def search(
-        self,
-        *args,
-        **kwargs,
-    ) -> Any:
-        return await self.rest.search(*args, **kwargs)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Public methods
 
     async def connect(
         self,
         *,
+        timeout: float,
+        reconnect: bool,
         self_deaf: bool = True,
         self_mute: bool = False,
     ) -> None:
@@ -309,6 +310,10 @@ class Player(VoiceProtocol):
         )
         self._node._players[self.guild.id] = self
         self._is_connected = True
+
+        self._log.debug(
+            f"Connected to voice channel {self.channel} in guild {self.guild}."
+        )
 
     async def stop(self) -> None:
         """Stops the currently playing track."""
@@ -348,22 +353,21 @@ class Player(VoiceProtocol):
         self,
         track: Track,
         *,
-        start: Optional[int] = None,
+        start: int = 0,
         end: Optional[int] = None,
         noReplace: bool = True,
         volume: Optional[int] = None,
     ) -> Track:
-        """Plays a track. If a Spotify track is passed in, it will be handled accordingly."""
+        """Plays a track"""
 
-        data = UpdatePlayerRequest(
+        data = UpdatePlayerRequest(  # NOTE: Cannot specify both encodedTrack and identifier, we passed encoded here
             noReplase=noReplace,
             track=UpdatePlayerTrack(
                 encoded=track.encoded,
-                identifier=track.identifier,
                 userData=track,
             ),
-            position=start,
-            endTime=end,
+            position=start or 0,
+            endTime=end or None,
             volume=volume or self.volume,
             pause=False,
         )
@@ -400,27 +404,20 @@ class Player(VoiceProtocol):
         await self.rest.update_player(guild_id=self._guild.id, data=data)
 
         self._log.debug(
-            f"Playing {track.title} from uri {track.uri} with a length of {track.length}",
+            f"Playing {track.info.title} from uri {track.info.uri} with a length of {track.info.length}",
         )
 
         return self._current
 
     async def seek(self, position: int) -> int:
         """Seeks to a position in the currently playing track milliseconds"""
-        if not self._current or not self._current.original:
+        if not self._current or not self._current.encoded:
             return 0.0
 
-        if position < 0 or position > self._current.original.length:
+        if position < 0 or position > self._current.info.length:
             raise TrackInvalidPosition(
                 "Seek position must be between 0 and the track length",
             )
-
-        # await self._node.send(
-        #     method="PATCH",
-        #     path=self._player_endpoint_uri,
-        #     guild_id=self._guild.id,
-        #     data={"position": int(position)},
-        # )
 
         await self.rest.update_player(
             guild_id=self._guild.id,
@@ -432,12 +429,6 @@ class Player(VoiceProtocol):
 
     async def set_pause(self, pause: Optional[bool] = None) -> bool:
         """Sets the pause state of the currently playing track."""
-        # await self._node.send(
-        #     method="PATCH",
-        #     path=self._player_endpoint_uri,
-        #     guild_id=self._guild.id,
-        #     data={"paused": pause or not self._paused},
-        # )
         await self.rest.update_player(
             guild_id=self._guild.id,
             data={"paused": pause or not self._paused},
@@ -445,17 +436,13 @@ class Player(VoiceProtocol):
 
         self._paused = pause or not self._paused
 
-        self._log.debug(f"Player has been {'paused' if pause else 'resumed'}.")
+        self._log.debug(
+            f"Player has been {'paused' if self._paused else 'resumed'}. ({pause or not self._paused})"
+        )
         return self._paused
 
     async def set_volume(self, volume: int) -> int:
         """Sets the volume of the player as an integer. Lavalink accepts values from 0 to 500."""
-        # await self._node.send(
-        #     method="PATCH",
-        #     path=self._player_endpoint_uri,
-        #     guild_id=self._guild.id,
-        #     data={"volume": int(volume)},
-        # )
 
         await self.rest.update_player(guild_id=self._guild.id, data={"volume": volume})
 
@@ -487,22 +474,13 @@ class Player(VoiceProtocol):
 
         payload = self._filters.get_all_payloads()
 
-        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+        await self.rest.update_player(
+            guild_id=self._guild.id, data={"filters": payload}
+        )
 
         await self.seek(self.position)  # TODO: Find a better way to do this
 
         self._log.debug(f"Filter has been applied to player with tag {_filter.tag}")
-        # await self._node.send(
-        #     method="PATCH",
-        #     path=self._player_endpoint_uri,
-        #     guild_id=self._guild.id,
-        #     data={"filters": payload},
-        # )
-
-        # self._log.debug(f"Filter has been applied to player with tag {_filter.tag}")
-        # if fast_apply:
-        #     self._log.debug(f"Fast apply passed, now applying filter instantly.")
-        #     await self.seek(self.position)
 
         return self._filters
 
@@ -517,7 +495,9 @@ class Player(VoiceProtocol):
         self._filters.remove_filter(filter_tag=filter_tag)
         payload = self._filters.get_all_payloads()
 
-        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+        await self.rest.update_player(
+            guild_id=self._guild.id, data={"filters": payload}
+        )
 
         await self.seek(self.position)  # TODO: Find a better way to do this
 
@@ -538,7 +518,9 @@ class Player(VoiceProtocol):
         self._filters.edit_filter(filter_tag=filter_tag, to_apply=edited_filter)
         payload = self._filters.get_all_payloads()
 
-        self.rest.update_player(guild_id=self._guild.id, data={"filters": payload})
+        await self.rest.update_player(
+            guild_id=self._guild.id, data={"filters": payload}
+        )
 
         await self.seek(self.position)  # TODO: Find a better way to do this
 
@@ -565,7 +547,7 @@ class Player(VoiceProtocol):
             )
 
         self._filters.reset_filters()
-        self.rest.update_player(guild_id=self._guild.id, data={"filters": {}})
+        await self.rest.update_player(guild_id=self._guild.id, data={"filters": {}})
 
         await self.seek(self.position)  # TODO: Find a better way to do this
 
