@@ -10,9 +10,8 @@ from abc import ABC
 from typing import Any, Optional, Tuple
 
 from disnake import Client, Guild
-from disnake.ext import commands
 
-from .objects import Track
+from .models import Track
 from .player import Player
 from .pool import NodePool
 
@@ -43,7 +42,7 @@ class TrackStartEvent(PersikEvent):
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
-        self.track: Optional[Track] = self.player.current
+        self.track: Track = Track.model_validate(data["track"])
 
         # on_persik_track_start(player, track)
         self.handler_args = self.player, self.track
@@ -61,7 +60,7 @@ class TrackEndEvent(PersikEvent):
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
-        self.track: Optional[Track] = self.player._ending_track
+        self.track: Track = Track.model_validate(data["track"])
         self.reason: str = data["reason"].lower()
 
         # on_persik_track_end(player, track, reason)
@@ -84,7 +83,7 @@ class TrackStuckEvent(PersikEvent):
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
-        self.track: Optional[Track] = self.player._ending_track
+        self.track: Track = Track.model_validate(data["track"])
         self.threshold: float = data["thresholdMs"]
 
         # on_persik_track_stuck(player, track, threshold)
@@ -106,8 +105,7 @@ class TrackExceptionEvent(PersikEvent):
 
     def __init__(self, data: dict, player: Player):
         self.player: Player = player
-        assert self.player._ending_track is not None
-        self.track: Optional[Track] = self.player._ending_track
+        self.track: Track = Track.model_validate(data["track"])
         # Error is for Lavalink <= 3.3
         self.exception: str = data.get("error") or data.get("exception")
 
