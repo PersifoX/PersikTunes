@@ -9,7 +9,7 @@ LAVALINK WS MODELS
 """
 
 
-class BaseWebsocketRequest(BaseModel):
+class BaseWebsocketResponse(BaseModel):
     op: Literal["ready", "playerUpdate", "event", "stats"]
 
 
@@ -39,17 +39,17 @@ class FrameStats(BaseModel):
     deflict: Optional[int] = None
 
 
-class ReadyOP(BaseWebsocketRequest):
+class ReadyOP(BaseWebsocketResponse):
     resumed: bool
     sessionId: str
 
 
-class PlayerUpdateOP(BaseWebsocketRequest):
+class PlayerUpdateOP(BaseWebsocketResponse):
     guildId: str
     state: PlayerState
 
 
-class StatsOP(BaseWebsocketRequest):
+class StatsOP(BaseWebsocketResponse):
     players: int
     playingPlayers: int
     uptime: int
@@ -58,7 +58,7 @@ class StatsOP(BaseWebsocketRequest):
     frameStats: Optional[FrameStats] = None
 
 
-class EventOP(BaseWebsocketRequest):
+class EventOP(BaseWebsocketResponse):
     type: Literal[
         "TrackStartEvent",
         "TrackEndEvent",
@@ -66,7 +66,8 @@ class EventOP(BaseWebsocketRequest):
         "TrackExceptionEvent",
         "WebSocketClosedEvent",
     ]
-    guildId: str
+
+    guildId: Optional[int] = None
 
 
 class TrackStartEvent(EventOP):
