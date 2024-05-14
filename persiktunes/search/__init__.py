@@ -4,6 +4,8 @@
 This module contains all the search functions used in PersikTunes.
 """
 
+from typing import Any, List
+
 from ..models import Playlist, Track
 
 
