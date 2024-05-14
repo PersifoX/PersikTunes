@@ -148,70 +148,6 @@ class Track(ExtraModel):
 
     tag: Optional[AnyStr] = None  # Optional track tag
 
-    @property
-    def title(self) -> str:
-        """Title of track"""
-        return self.info.title
-
-    @property
-    def author(self) -> str:
-        """Author of track"""
-        return self.info.author
-
-    @property
-    def length(self) -> int:
-        """Length of track"""
-        return self.info.length
-
-    @property
-    def uri(self) -> str:
-        """URI of track"""
-        return self.info.uri
-
-    @property
-    def thumbnail(self) -> str:
-        """Thumbnail of track (artwork)"""
-        return self.info.artworkUrl
-
-    @property
-    def isrc(self) -> str:
-        """ISRC of track"""
-        return self.info.isrc
-
-    @property
-    def is_stream(self) -> bool:
-        """Is track a stream?"""
-        return self.info.isStream
-
-    @property
-    def position(self) -> int:
-        """Position of timeline"""
-        return self.info.position
-
-    @property
-    def is_seekable(self) -> bool:
-        """Is track seekable?"""
-        return self.info.isSeekable
-
-    @property
-    def source_name(self) -> str:
-        return self.info.sourceName
-
-    @property
-    def identifier(self) -> str:
-        """Identifier of track"""
-        return self.info.identifier
-
-    @property
-    def tag(self) -> str | None:
-        """Tag of track"""
-        return self.tag
-
-    @property
-    def color(self) -> int | None:
-        """Color of track"""
-        return self.color
-
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Track):
             return False
@@ -234,8 +170,6 @@ class Playlist(ExtraModel):
     tracks: List[Track] = []
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    length: int
-
     uri: Optional[str] = None
     ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
     requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
@@ -246,35 +180,17 @@ class Playlist(ExtraModel):
 
     tag: Optional[AnyStr] = None  # Optional playlist tag
 
-    @property
     def length(self) -> int:
         """Length of playlist"""
         return sum([t.info.length for t in self.tracks])
 
-    @property
-    def name(self) -> str:
-        """Name of playlist"""
-        return self.info.name
-
-    @property
-    def selected_track(self) -> int:
-        """Selected track of playlist"""
-        return self.info.selectedTrack
-
-    @property
     def track_count(self) -> int:
         """Count of tracks in playlist"""
         return len(self.tracks)
 
-    @property
     def thumbnail(self) -> str | None:
         """Thumbnail of playlist (artwork)"""
         return self.pluginInfo.get("artworkUrl") if self.pluginInfo else None
-
-    @property
-    def color(self) -> int | None:
-        """Color of playlist"""
-        return self.color
 
     def __str__(self) -> str:
         return self.info.name
@@ -319,6 +235,18 @@ class LavalinkTrackLoadingResponse(BaseModel):
             LavalinkExceptionResponse,
         ]
     ] = {}
+
+
+class LavaSearchLoadingResponse(BaseModel):
+    """Base lavalink search loading response model."""
+
+    tracks: Optional[List[Track]] = None
+    playlists: Optional[List[Playlist]] = None
+    albums: Optional[List[Playlist]] = None
+    artists: Optional[List[Playlist]] = None
+    texts: Optional[List[Any]] = None
+
+    plugin: Optional[Any] = None
 
 
 class LavalinkTrackDecodeResponse(Track):
@@ -402,7 +330,7 @@ class UpdatePlayerRequest(BaseRestRequest):
     position: int = 0
     endTime: Optional[int] = None
     volume: Optional[int] = None
-    pause: Optional[bool] = None
+    paused: Optional[bool] = None
     filters: Optional[Filters] = None
     voice: Optional[VoiceState] = None
 
