@@ -5,31 +5,26 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 import aiohttp
 from disnake import Interaction, Member, User
 from disnake.ext import commands
-from enums import *
-from exceptions import NodeNotAvailable, NodeRestException
-from models.restapi import *
-from models.ws import *
-from pool import Node
-from utils import LavalinkVersion
 
-from persiktunes import __version__
+from .. import __version__
+from ..enums import *
+from ..exceptions import NodeNotAvailable, NodeRestException
+from ..models.restapi import *
+from ..models.ws import *
+from ..utils import LavalinkVersion
 
 
 class LavalinkRest:
     def __init__(
         self,
-        *,
-        node: Node,
+        node: Any,
         host: str,
         port: int,
         password: str,
         user_id: int,
         secure: bool = False,
-        loop: Optional[asyncio.AbstractEventLoop] = None,
         session: Optional[aiohttp.ClientSession] = None,
-        fallback: bool = False,
         log_level: LogLevel = LogLevel.INFO,
-        log_handler: Optional[logging.Handler] = None,
         setup_logging: Optional[Callable] = None,
     ):
         if not isinstance(port, int):
@@ -38,19 +33,14 @@ class LavalinkRest:
         self._host: str = host
         self._port: int = port
         self._password: str = password
-        self._fallback: bool = fallback
         self._log_level: LogLevel = log_level
-        self._log_handler = log_handler
 
         self._secure = secure
 
         self.node = node
 
         self._session: aiohttp.ClientSession = session  # type: ignore
-        self._loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
 
-        self._session_id: Optional[str] = None
-        self._available: bool = False
         self._version: LavalinkVersion = LavalinkVersion(0, 0, 0)
 
         self._log = (
@@ -66,8 +56,8 @@ class LavalinkRest:
         self.user_id = user_id
 
         self._headers = {
-            "Authorization": self._password,
-            "User-Id": self.user_id,
+            "Authorization": f"{self._password}",
+            "User-Id": f"{self.user_id}",
             "Client-Name": f"PersikTunes/{__version__}",
         }
 
@@ -102,7 +92,7 @@ class LavalinkRest:
             json=data or {},
         )
         self._log.debug(
-            f"Making REST request to Node {self.node._identifier} with method {method} to {uri}",
+            f"Making REST request to Node {self.node._identifier} with method {method} to {uri}\nRequest data: {data}",
         )
         if resp.status >= 300:
             resp_data: dict = await resp.json()
@@ -135,29 +125,115 @@ class LavalinkRest:
         ctx: Optional[Union[commands.Context, Interaction]] = None,
         requester: Optional[Union[Member, User]] = None,
         description: Optional[str] = None,
-    ) -> LavalinkTrackLoadingResponse:
+        use_lavasearch: bool = False,
+        types: Optional[List[Literal["playlist", "track", "artist", "album"]]] = [
+            "playlist",
+            "track",
+            "artist",
+            "album",
+        ],
+    ) -> LavalinkTrackLoadingResponse | LavaSearchLoadingResponse:
 
-        if not re.match(URLRegex.BASE_URL, query):
-            query = f"{stype.value}:{query}"
+        if not use_lavasearch:
+            if not re.match(URLRegex.BASE_URL, query):
+                query = f"{stype.value}:{query}"
 
-        response = await self.send("GET", f"loadtracks?identifier={query}")
+            response = await self.send("GET", f"loadtracks?identifier={query}")
+            validated = LavalinkTrackLoadingResponse.model_validate(response)
 
-        validated = LavalinkTrackLoadingResponse.model_validate(response)
+            if validated.loadType == "search":
+                data = []
 
-        typed = type(validated.data)
+                for track in validated.data:
+                    data.append(
+                        track.model_copy(
+                            update={
+                                "ctx": ctx,
+                                "requester": requester,
+                                "description": description,
+                            }
+                        )
+                    )
 
-        if typed == type(List[Track]):
-            for track in validated.data:
-                track.ctx = ctx
-                track.requester = requester
-                track.description = description
+                validated = validated.model_copy(update={"data": data})
 
-        elif typed == type(Playlist) or typed == type(Track):
-            validated.data.ctx = ctx
-            validated.data.requester = requester
-            validated.data.description = description
+            elif validated.loadType in ("track", "playlist"):
+                data = validated.data.model_copy(
+                    update={
+                        "ctx": ctx,
+                        "requester": requester,
+                        "description": description,
+                    }
+                )
+                validated = validated.model_copy(update={"data": data})
+
+            return validated
+
+        response = await self.send(
+            "GET",
+            f"loadsearch?query={query}" + "&types=" + ",".join(types),
+        )
+        validated = LavaSearchLoadingResponse.model_validate(response)
+
+        tracks = playlists = albums = []
+
+        for track in validated.data.tracks or []:
+            tracks.append(
+                track.model_copy(
+                    update={
+                        "ctx": ctx,
+                        "requester": requester,
+                        "description": description,
+                    }
+                )
+            )
+
+        for playlist in validated.data.playlists or []:
+            playlists.append(
+                playlist.model_copy(
+                    update={
+                        "ctx": ctx,
+                        "requester": requester,
+                        "description": description,
+                    }
+                )
+            )
+
+        for album in validated.data.albums or []:
+            albums.append(
+                album.model_copy(
+                    update={
+                        "ctx": ctx,
+                        "requester": requester,
+                        "description": description,
+                    }
+                )
+            )
+
+        validated = validated.model_copy(
+            update={
+                "data": {"tracks": tracks, "playlists": playlists, "albums": albums},
+            }
+        )
 
         return validated
+
+    async def recommendations(
+        self,
+        tracks: List[Track],
+        *,
+        ctx: Optional[Union[commands.Context, Interaction]] = None,
+        requester: Optional[Union[Member, User]] = None,
+        description: Optional[str] = None,
+    ) -> LavalinkTrackLoadingResponse:
+
+        return await self.search(
+            f'seed_tracks={",".join([track.identifier for track in tracks])}',
+            stype=SearchType.sprec,
+            ctx=ctx,
+            requester=requester,
+            description=description,
+        )
 
     async def decode_track(self, encoded: str) -> LavalinkTrackDecodeResponse:
         response = await self.send("GET", f"decodetrack?encodedTrack={encoded}")
@@ -170,12 +246,12 @@ class LavalinkRest:
         return LavalinkTrackDecodeMultiplyResponse.model_validate({"tracks": response})
 
     async def get_players(self) -> List[LavalinkPlayer]:
-        response = await self.send("GET", f"sessions/{self._session_id}/players")
+        response = await self.send("GET", f"sessions/{self.node._session_id}/players")
         return [LavalinkPlayer.model_validate(player) for player in response]
 
     async def get_player(self, guild_id: int) -> LavalinkPlayer:
         response = await self.send(
-            "GET", f"sessions/{self._session_id}/players/{guild_id}"
+            "GET", f"sessions/{self.node._session_id}/players/{guild_id}"
         )
         return LavalinkPlayer.model_validate(response)
 
@@ -189,17 +265,28 @@ class LavalinkRest:
             else UpdatePlayerRequest.model_validate(data)
         )
 
+        if data.track:  # exclude extra fields
+            verified_track = data.track.userData.model_dump(
+                include=["encoded", "info", "pluginInfo", "userData"]
+            )
+
+            data.track.userData = Track.model_validate(verified_track)
+
         response = await self.send(
             data.method,
-            f"sessions/{self._session_id}/players/{guild_id}",
-            data=data.model_dump(exclude=["method", "noReplace"]),
+            f"sessions/{self.node._session_id}/players/{guild_id}",
+            data=data.model_dump(
+                exclude=["method", "noReplace"], exclude_none=True, exclude_unset=True
+            ),
             query=f"noReplace={data.noReplase.__str__().lower()}",
         )
 
         return LavalinkPlayer.model_validate(response)
 
     async def destroy_player(self, guild_id: int) -> None:
-        await self.send("DELETE", f"sessions/{self._session_id}/players/{guild_id}")
+        await self.send(
+            "DELETE", f"sessions/{self.node._session_id}/players/{guild_id}"
+        )
 
     async def update_session(self, data: Union[UpdateSessionRequest, dict]) -> None:
 
@@ -211,6 +298,6 @@ class LavalinkRest:
 
         await self.send(
             data.method,
-            f"sessions/{self._session_id}",
+            f"sessions/{self.node._session_id}",
             data=data.model_dump(exclude=["method"]),
         )
