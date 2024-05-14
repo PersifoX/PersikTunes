@@ -32,14 +32,14 @@ class Queue(Iterable[Track]):
         ### Init method:
 
         ```py
-        self.max_size: Optional[int] "max size of the queue"
-        self._current_item: Optional[Track] "current item in the queue"
-        self._queue: List[Track] "list of items in the queue"
-        self._overflow: bool "if True, allows queue to grow beyond max_size"
-        self._loop_mode: Optional[LoopMode] "One of None, LoopMode.QUEUE, LoopMode.TRACK"
-        self._return_exceptions: bool "if True, exceptions will raised instead of returning None (in some cases)"
-        self._primary: Optional[Track] "Primary track. After track ends, queue will be resumed"
-        self._loose_mode: bool "If True, queue will not stop when track ends"
+        max_size: Optional[int] "max size of the queue"
+        _current_item: Optional[Track] "current item in the queue"
+        _queue: List[Track] "list of items in the queue"
+        _overflow: bool "if True, allows queue to grow beyond max_size"
+        _loop_mode: Optional[LoopMode] "One of None, LoopMode.QUEUE, LoopMode.TRACK"
+        _return_exceptions: bool "if True, exceptions will raised instead of returning None (in some cases)"
+        _primary: Optional[Track] "Primary track. After track ends, queue will be resumed"
+        _loose_mode: bool "If True, queue will not stop when track ends"
         ```
         """
         self.max_size: Optional[int] = max_size
@@ -148,7 +148,9 @@ class Queue(Iterable[Track]):
         return (
             self._queue.pop(0)
             if self._loop_mode
-            else self._queue[self._index(self._current_item) + 1]
+            else self._queue[
+                self._index(self._current_item) if self._current_item else -1 + 1
+            ]
         )
 
     def _drop(self) -> Track:
@@ -262,10 +264,10 @@ class Queue(Iterable[Track]):
             self._current_item = self._get()
 
         except:
-            if self._loop_mode.value == "queue":
+            if self._loop_mode == LoopMode.QUEUE:
                 self._current_item = self._queue[0]
 
-                return self._current_item
+        return self._current_item
 
     def prev(self):
         """Return prevision immediately available item in queue if any.
