@@ -10,6 +10,7 @@ import asyncio
 import logging
 import random
 import re
+import time
 from os import path
 from pathlib import Path
 from typing import (
@@ -26,24 +27,19 @@ from typing import (
 from urllib.parse import quote
 
 import aiohttp
+import aiohttp.http_exceptions as exceptions
 import typing_extensions
 from disnake import Client, ClientUser, Interaction, Member, User
 from disnake.ext import commands
 from spotipy.oauth2 import SpotifyClientCredentials
+from websockets import client, exceptions
 
 from . import __version__
 from .clients.rest import LavalinkRest
 from .clients.ws import LavalinkWebsocket
 from .enums import *
 from .enums import LogLevel
-from .exceptions import (
-    LavalinkVersionIncompatible,
-    NodeCreationError,
-    NodeNotAvailable,
-    NodeRestException,
-    NoNodesAvailable,
-    TrackLoadError,
-)
+from .exceptions import *
 from .filters import Filter
 from .models.restapi import Playlist, Track
 from .routeplanner import RoutePlanner
@@ -117,6 +113,8 @@ class Node:
         self._available: bool = False
         self._version: LavalinkVersion = LavalinkVersion(0, 0, 0)
 
+        self._resume = False
+
         self._route_planner = RoutePlanner(self)
         self._log = self._setup_logging(self._log_level)
 
@@ -127,33 +125,27 @@ class Node:
 
         self._players: Dict[int, Player] = {}
 
-        self._websocket: LavalinkWebsocket = LavalinkWebsocket(
+        self._websocket = LavalinkWebsocket(
             self,
             self._host,
             self._port,
             self._password,
             self._bot.user.id,
             secure,
-            heartbeat,
-            resume_key,
-            resume_timeout,
             loop,
-            session,
             fallback,
             log_level=log_level,
             setup_logging=self._setup_logging,
         )
 
-        self._rest: LavalinkRest = LavalinkRest(
+        self._rest = LavalinkRest(
             self,
             self._host,
             self._port,
             self._password,
             self._bot.user.id,
             secure,
-            loop,
             session,
-            fallback,
             log_level=log_level,
             setup_logging=self._setup_logging,
         )
@@ -170,9 +162,9 @@ class Node:
         return self._websocket.is_connected
 
     @property
-    def stats(self) -> NodeStats:
+    def stats(self) -> Any:
         """Property which returns the node stats."""
-        return self._websocket._stats
+        return self._stats
 
     @property
     def players(self) -> Dict[int, Player]:
@@ -270,21 +262,119 @@ class Node:
             )
 
     async def _configure_resuming(self) -> None:
-        if not self._resume_key:
-            return
 
         data = {"timeout": self._resume_timeout}
 
         if self._version.major == 3:
-            data["resumingKey"] = self._resume_key
+            data["resumingKey"] = self._resume_key or self._bot.user.id.__str__()
         elif self._version.major == 4:
             data["resuming"] = True
 
-        await self.send(
+        await self.rest.send(
             method="PATCH",
             path=f"sessions/{self._session_id}",
             include_version=True,
             data=data,
+        )
+
+        self._resume = True
+
+    async def connect(self, *, reconnect: bool = False):
+        """Initiates a connection with a Lavalink node and adds it to the node pool."""
+        await self._bot.wait_until_ready()
+
+        start = time.perf_counter()
+
+        if not self.rest._session:
+            self.rest._session = aiohttp.ClientSession()
+
+        try:
+            if not reconnect:
+                version: str = await self.rest.send(
+                    method="GET",
+                    path="version",
+                    ignore_if_available=True,
+                    include_version=False,
+                )
+
+                await self._handle_version_check(version=version)
+
+                self.rest._version = self._version
+                self._websocket._version = self._version
+
+                self._log.debug(
+                    f"Version check from Node {self._identifier} successful. Returned version {version}",
+                )
+
+            self._websocket._websocket = await client.connect(
+                f"{self._websocket._websocket_uri}/v{self._version.major}/websocket",
+                extra_headers=self._websocket._headers,
+                ping_interval=self._heartbeat,
+            )
+
+            if reconnect:
+                self._log.debug(f"Trying to reconnect to Node {self._identifier}...")
+                if self.player_count:
+                    for player in self.players.values():
+                        await player._refresh_endpoint_uri(self._session_id)
+
+            self._log.debug(
+                f"Node {self._identifier} successfully connected to websocket using {self._websocket._websocket_uri}/v{self._version.major}/websocket",
+            )
+
+            if not self._websocket._task:
+                self._websocket._task = self._loop.create_task(
+                    self._websocket._listen()
+                )
+
+            self._available = True
+
+            end = time.perf_counter()
+
+            self._log.info(
+                f"Connected to node {self._identifier}. Took {end - start:.3f}s"
+            )
+            return self
+
+        except (aiohttp.ClientConnectorError, OSError, ConnectionRefusedError):
+            raise NodeConnectionFailure(
+                f"The connection to node '{self._identifier}' failed.",
+            ) from None
+        except exceptions.InvalidHandshake:
+            raise NodeConnectionFailure(
+                f"The password for node '{self._identifier}' is invalid.",
+            ) from None
+        except exceptions.InvalidURI:
+            raise NodeConnectionFailure(
+                f"The URI for node '{self._identifier}' is invalid.",
+            ) from None
+
+    async def disconnect(self, fall: bool = False) -> None:
+        """Disconnects a connected Lavalink node and removes it from the node pool.
+        This also destroys any players connected to the node.
+        """
+
+        if fall:
+            self._log.error("Failed to connect to Lavalink node.")
+
+        start = time.perf_counter()
+
+        for player in self.players.copy().values():
+            if not self._resume:
+                await player.destroy()
+                self._log.debug(f"Player {player.id} has been disconnected from node.")
+
+        await self._websocket._websocket.close()
+        await self.rest._session.close()
+        self._log.debug("Websocket and http session closed.")
+
+        del self.pool._nodes[self._identifier]
+        self._available = False
+        self._websocket._task.cancel()
+
+        end = time.perf_counter()
+        self._log.info(
+            f"Successfully disconnected from node {self._identifier} and closed all sessions. Took {end - start:.3f}s",
         )
 
     @typing_extensions.deprecated("This method is deprecated; use `rest.send` instead.")
@@ -700,6 +790,7 @@ class NodePool:
         log_level: LogLevel = LogLevel.INFO,
         log_handler: Optional[logging.Handler] = None,
         spotify_credentials: Optional[SpotifyClientCredentials] = None,
+        setup_logging: Optional[Callable] = None,
     ) -> Node:
         """Creates a Node object to be then added into the node pool.
         For Spotify searching capabilites, pass in valid Spotify API credentials.
@@ -726,6 +817,7 @@ class NodePool:
             log_level=log_level,
             log_handler=log_handler,
             spotify_credentials=spotify_credentials,
+            setup_logging=setup_logging,
         )
 
         await node.connect()
