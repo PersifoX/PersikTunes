@@ -35,7 +35,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from websockets import client, exceptions
 
 from . import __version__
-from .clients.rest import LavalinkRest
+from .clients.rest import LavalinkPlayer, LavalinkRest
 from .clients.ws import LavalinkWebsocket
 from .enums import *
 from .enums import LogLevel
@@ -68,7 +68,10 @@ class Node:
         identifier: str,
         secure: bool = False,
         heartbeat: int = 120,
-        resume_key: Optional[str] = None,
+        get_resume_key: Optional[Callable] = None,
+        set_resume_key: Optional[Callable] = None,
+        get_player_channel: Optional[Callable] = None,
+        set_player_channel: Optional[Callable] = None,
         resume_timeout: int = 60,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         session: Optional[aiohttp.ClientSession] = None,
@@ -88,7 +91,10 @@ class Node:
         self._password: str = password
         self._identifier: str = identifier
         self._heartbeat: int = heartbeat
-        self._resume_key: Optional[str] = resume_key
+        self._get_resume_key: Optional[Callable] = get_resume_key
+        self._set_resume_key: Optional[Callable] = set_resume_key
+        self._get_player_channel: Optional[Callable] = get_player_channel
+        self._set_player_channel: Optional[Callable] = set_player_channel
         self._resume_timeout: int = resume_timeout
         self._secure: bool = secure
         self._fallback: bool = fallback
@@ -113,8 +119,6 @@ class Node:
         self._available: bool = False
         self._version: LavalinkVersion = LavalinkVersion(0, 0, 0)
 
-        self._resume = False
-
         self._route_planner = RoutePlanner(self)
         self._log = self._setup_logging(self._log_level)
 
@@ -124,6 +128,8 @@ class Node:
         self._bot_user = self._bot.user
 
         self._players: Dict[int, Player] = {}
+
+        self.event = asyncio.Event()
 
         self._websocket = LavalinkWebsocket(
             self,
@@ -155,6 +161,22 @@ class Node:
             f"<PersikTunes.node ws_uri={self._websocket._websocket_uri} rest_uri={self._rest_uri}"
             f"player_count={len(self._players)}>"
         )
+
+    async def get_resume_key(self) -> str | None:
+        if self._get_resume_key:
+            return await self._get_resume_key()
+
+    async def set_resume_key(self, resume_key: str | None = None) -> None:
+        if self._set_resume_key:
+            await self._set_resume_key(resume_key)
+
+    async def get_player_channel(self, guild_id: int):
+        if self._get_player_channel:
+            return await self._get_player_channel(guild_id)
+
+    async def set_player_channel(self, player: Player, channel_id: int | None = None):
+        if self._set_player_channel:
+            await self._set_player_channel(player, channel_id)
 
     @property
     def is_connected(self) -> bool:
@@ -262,11 +284,10 @@ class Node:
             )
 
     async def _configure_resuming(self) -> None:
-
         data = {"timeout": self._resume_timeout}
 
         if self._version.major == 3:
-            data["resumingKey"] = self._resume_key or self._bot.user.id.__str__()
+            data["resumingKey"] = self._session_id
         elif self._version.major == 4:
             data["resuming"] = True
 
@@ -274,52 +295,51 @@ class Node:
             method="PATCH",
             path=f"sessions/{self._session_id}",
             include_version=True,
+            ignore_if_available=True,
             data=data,
         )
 
-        self._resume = True
-
-    async def connect(self, *, reconnect: bool = False):
+    async def connect(self):
         """Initiates a connection with a Lavalink node and adds it to the node pool."""
         await self._bot.wait_until_ready()
 
         start = time.perf_counter()
 
+        self._session_id = await self.get_resume_key()
+
+        self._log.debug(
+            f"Connecting to Lavalink node {self._identifier} with session {self._session_id}"
+        )
+
         if not self.rest._session:
             self.rest._session = aiohttp.ClientSession()
 
         try:
-            if not reconnect:
-                version: str = await self.rest.send(
-                    method="GET",
-                    path="version",
-                    ignore_if_available=True,
-                    include_version=False,
-                )
+            version: str = await self.rest.send(
+                method="GET",
+                path="version",
+                ignore_if_available=True,
+                include_version=False,
+            )
 
-                await self._handle_version_check(version=version)
+            await self._handle_version_check(version=version)
 
-                self.rest._version = self._version
-                self._websocket._version = self._version
+            self.rest._version = self._version
+            self._websocket._version = self._version
 
-                self._log.debug(
-                    f"Version check from Node {self._identifier} successful. Returned version {version}",
-                )
+            self._log.debug(
+                f"Version check from Node {self._identifier} successful. Returned version {version}",
+            )
 
             self._websocket._websocket = await client.connect(
                 f"{self._websocket._websocket_uri}/v{self._version.major}/websocket",
-                extra_headers=self._websocket._headers,
+                extra_headers={
+                    "Authorization": self._password,
+                    "User-Id": self._bot_user.id,
+                    "Client-Name": f"PersikTunes/{__version__}",
+                    "Session-Id": self._session_id,
+                },
                 ping_interval=self._heartbeat,
-            )
-
-            if reconnect:
-                self._log.debug(f"Trying to reconnect to Node {self._identifier}...")
-                if self.player_count:
-                    for player in self.players.values():
-                        await player._refresh_endpoint_uri(self._session_id)
-
-            self._log.debug(
-                f"Node {self._identifier} successfully connected to websocket using {self._websocket._websocket_uri}/v{self._version.major}/websocket",
             )
 
             if not self._websocket._task:
@@ -327,7 +347,56 @@ class Node:
                     self._websocket._listen()
                 )
 
+            await self.event.wait()
+
             self._available = True
+
+            if self.get_resume_key and self._version.major == 4:
+                self._session_id = await self.get_resume_key()
+
+                self._log.debug(f"Trying to reconnect to Node {self._identifier}...")
+
+                if self.player_count:
+                    for player in self.players.values():
+                        await player._refresh_endpoint_uri(self._session_id)
+
+                elif self._get_player_channel:
+
+                    response = await self.rest.send(
+                        method="GET",
+                        path=f"sessions/{self._session_id}/players",
+                        ignore_if_available=True,
+                        include_version=True,
+                    )
+
+                    from .player import Player
+
+                    for player in response:
+                        player = LavalinkPlayer.model_validate(player)
+
+                        if player.state.connected:
+                            channel = await self.get_player_channel(player.guildId)
+
+                            self._log.debug(
+                                f"Found player {player.guildId} in guild {channel.id}"
+                            )
+
+                            self._players.update(
+                                {
+                                    player.guildId: await Player.from_model(
+                                        Player(self.bot, channel, node=self), player
+                                    )
+                                }
+                            )
+
+                            self._log.debug(f"Added player {player.guildId} to list")
+
+                        else:
+                            await self.rest.destroy_player(player.guildId)
+
+            self._log.debug(
+                f"Node {self._identifier} successfully connected to websocket using {self._websocket._websocket_uri}/v{self._version.major}/websocket",
+            )
 
             end = time.perf_counter()
 
@@ -359,8 +428,8 @@ class Node:
 
         start = time.perf_counter()
 
-        for player in self.players.copy().values():
-            if not self._resume:
+        if not self._get_resume_key:
+            for player in self.players.copy().values():
                 await player.destroy()
                 self._log.debug(f"Player {player.id} has been disconnected from node.")
 
@@ -782,7 +851,10 @@ class NodePool:
         identifier: str,
         secure: bool = False,
         heartbeat: int = 120,
-        resume_key: Optional[str] = None,
+        get_resume_key: Optional[Callable] = None,
+        set_resume_key: Optional[Callable] = None,
+        get_player_channel: Optional[Callable] = None,
+        set_player_channel: Optional[Callable] = None,
         resume_timeout: int = 60,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         session: Optional[aiohttp.ClientSession] = None,
@@ -809,7 +881,10 @@ class NodePool:
             identifier=identifier,
             secure=secure,
             heartbeat=heartbeat,
-            resume_key=resume_key,
+            get_resume_key=get_resume_key,
+            set_resume_key=set_resume_key,
+            get_player_channel=get_player_channel,
+            set_player_channel=set_player_channel,
             resume_timeout=resume_timeout,
             loop=loop,
             session=session,
