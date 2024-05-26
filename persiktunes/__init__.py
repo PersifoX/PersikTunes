@@ -5,9 +5,10 @@ The modern Lavalink wrapper designed for disnake.
 
 ### Dependencies:
 - `disnake` (v2.x)[ https://github.com/DisnakeDev/disnake ]
-- `Lavalink server` (v3.7.x) (v4.0.x is recommended)[ https://github.com/freyacodes/Lavalink ]
+- `Lavalink server` (v4.0.x)[ https://github.com/freyacodes/Lavalink ]
 
 ### Recommended for usage:
+- `Redis server` (For resuming sessions and caching)[ https://redis.io/ ]
 - `LavaSRC` (Lavalink plugin for additional sound sources)[ https://github.com/topi314/LavaSrc ]
 - `LavaSearch` (Lavalink plugin for additional search features)[ https://github.com/topi314/LavaSearch ]
 
