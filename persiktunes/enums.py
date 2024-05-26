@@ -262,13 +262,15 @@ class URLRegex:
     )
 
     YOUTUBE_URL = re.compile(
-        r"^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))"
+        r"^((?:https?:)?\/\/)?((?:www|m|music)\.)?((?:youtube\.com|youtu.be))"
         r"(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?$",
     )
 
     YOUTUBE_PLAYLIST_URL = re.compile(
-        r"^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))/playlist\?list=.*",
+        r"^((?:https?:)?\/\/)?((?:www|m|music)\.)?((?:youtube\.com|youtu.be))/playlist\?list=.*",
     )
+
+    YOUTUBE_PLAYLIST_ID = re.compile(r"(?:list=|&list=)([a-zA-Z0-9_-]+)")
 
     YOUTUBE_TIMESTAMP = re.compile(
         r"(?P<video>^.*?)(\?t|&start)=(?P<time>\d+)?.*",
