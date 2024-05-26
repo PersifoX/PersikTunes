@@ -25,7 +25,7 @@ class Queue(Iterable[Track]):
         max_size: Optional[int] = None,
         *,
         overflow: bool = True,
-        return_exceptions: bool = False,
+        return_exceptions: bool = True,
         loose_mode: bool = False,
     ):
         """
@@ -35,11 +35,11 @@ class Queue(Iterable[Track]):
         max_size: Optional[int] "max size of the queue"
         _current_item: Optional[Track] "current item in the queue"
         _queue: List[Track] "list of items in the queue"
-        _overflow: bool "if True, allows queue to grow beyond max_size"
+        _overflow: bool "if True, drops first items when queue is full"
         _loop_mode: Optional[LoopMode] "One of None, LoopMode.QUEUE, LoopMode.TRACK"
         _return_exceptions: bool "if True, exceptions will raised instead of returning None (in some cases)"
         _primary: Optional[Track] "Primary track. After track ends, queue will be resumed"
-        _loose_mode: bool "If True, queue will not stop when track ends"
+        _loose_mode: bool "If True, track will delete from queue when it ends"
         ```
         """
         self.max_size: Optional[int] = max_size
@@ -49,15 +49,15 @@ class Queue(Iterable[Track]):
         self._queue: List[Track] = []
         "list of items in the queue"
         self._overflow: bool = overflow
-        "if True, allows queue to grow beyond max_size"
+        "if True, drops first items when queue is full"
         self._loop_mode: Optional[LoopMode] = None
-        "One of None, LoopMode.QUEUE, LoopMode.TRACK"
+        "One of `None`, `LoopMode.QUEUE`, `LoopMode.TRACK`"
         self._return_exceptions: bool = return_exceptions
-        "if True, exceptions will raised instead of returning None (in some cases)"
+        "if True, exceptions will raised instead of returning None (in most cases)"
         self._primary: Optional[Track] = None
         "Primary track. After track ends, queue will be resumed"
         self._loose_mode: bool = loose_mode
-        "If True, queue will not stop when track ends"
+        "If True, track will delete from queue when it ends"
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Overwritten iterable methods
@@ -89,14 +89,14 @@ class Queue(Iterable[Track]):
         Does not remove item from queue.
         """
         if not isinstance(index, int):
-            raise ValueError("'int' type required.'")
+            raise ValueError("'int' type required.")
 
         return self._queue[index]
 
     def __setitem__(self, index: int, item: Track) -> None:
         """Inserts an item at given position."""
         if not isinstance(index, int):
-            raise ValueError("'int' type required.'")
+            raise ValueError("'int' type required.")
 
         self.put_at_index(index, item)
 
@@ -145,40 +145,62 @@ class Queue(Iterable[Track]):
     # Private methods
 
     def _get(self) -> Track:
-        return (
-            self._queue.pop(0)
-            if self._loop_mode
-            else self._queue[
-                self._index(self._current_item) if self._current_item else -1 + 1
-            ]
-        )
+        """Get the next (or first if index lost) item in the queue."""
+        if self._loose_mode:
+            return self._queue.pop(0)
 
-    def _drop(self) -> Track:
-        return self._queue.pop()
+        if self._current_item in self._queue:
+            return self._queue[self._index(self._current_item) + 1]
 
-    def _index(self, item: Track) -> int:
-        return self._queue.index(item)
-
-    def _put(self, item: Track) -> None:
-        self._queue.append(item)
-
-    def _insert(self, index: int, item: Track) -> None:
-        self._queue.insert(index, item)
-
-    def _remove(self, item: Track) -> None:
-        self._queue.remove(item)
+        return self._queue[0]
 
     def _get_item(self, item: Union[Track, int]) -> Track:
+        """Sugar for get item by both int and Track."""
         if isinstance(item, Track):
             return item
 
         return self._queue[item]
+
+    def _drop(self) -> Track:
+        """Drop first item in the queue."""
+        return self._queue.pop(0)
+
+    def _index(self, item: Track) -> int:
+        """Get the index of the given item in the queue."""
+        return self._queue.index(self._check_track(item))
+
+    def _put(self, item: Track) -> None:
+        """Put the given item into the queue."""
+        self._queue.append(item)
+
+    def _insert(self, index: int, item: Track) -> None:
+        """Insert the given item into the queue at the specified index."""
+        self._queue.insert(index, item)
+
+    def _remove(self, item: Track) -> None:
+        """Remove the given item from the queue."""
+        self._queue.remove(item)
+
+    def _check_puttable(self) -> bool:
+        """Check if the queue can accept another item."""
+        if self.is_full:
+            if not self._overflow:
+                if self._return_exceptions:
+                    raise QueueFull(
+                        f"Queue max_size of {self.max_size} has been reached.",
+                    )
+                return False
+            else:
+                self._drop()
+
+        return True
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # static methods
 
     @staticmethod
     def _check_track(item: Track) -> Track:
+        """Check if the given item is a Track."""
         if not isinstance(item, Track):
             raise TypeError("Only PersikTunes.Track objects are supported.")
 
@@ -186,6 +208,7 @@ class Queue(Iterable[Track]):
 
     @classmethod
     def _check_track_container(cls, iterable: Iterable) -> List[Track]:
+        """Check if the given iterable contains only Track objects."""
         iterable = list(iterable)
         for item in iterable:
             cls._check_track(item)
@@ -245,7 +268,7 @@ class Queue(Iterable[Track]):
     def get(self) -> Track:
         """Alias for `next()` with additional check LoopMode, primary and loose_mode."""
 
-        if self._loop_mode == LoopMode.TRACK and self._current_item:
+        if self._loop_mode == LoopMode.TRACK:
             return self._current_item
 
         return self.next()
@@ -260,12 +283,11 @@ class Queue(Iterable[Track]):
             else:
                 return
 
-        try:
-            self._current_item = self._get()
+        if self._queue[-1] == self._current_item and self._loop_mode == LoopMode.QUEUE:
+            self._current_item = self._queue[0]
 
-        except:
-            if self._loop_mode == LoopMode.QUEUE:
-                self._current_item = self._queue[0]
+        else:
+            self._current_item = self._get()
 
         return self._current_item
 
@@ -273,20 +295,27 @@ class Queue(Iterable[Track]):
         """Return prevision immediately available item in queue if any.
         Raises QueueEmpty if no items in queue.
         """
-        if self.is_empty:
+        if self.is_empty or self._loose_mode:
             if self._return_exceptions:
-                raise QueueEmpty("No items in the queue.")
+                raise QueueEmpty(
+                    "No items in the queue."
+                    if self.is_empty
+                    else "Queue in loose mode, previous track unavailable."
+                )
             else:
                 return
 
-        if not self._current_item or self._current_item not in self._queue:
-            self._current_item = self._queue[0]
-
-        elif not self.find_position(self._current_item):
-            return
+        if self._current_item in self._queue:
+            if self._current_item != self._queue[0]:
+                self._current_item = self._queue[
+                    self.find_position(self._current_item) - 1
+                ]
 
         else:
-            self._current_item = self._queue[self.find_position(self._current_item) - 1]
+            if self._return_exceptions:
+                raise QueueEmpty("Can't find previous item in the queue.")
+
+            return
 
         return self._current_item
 
@@ -321,61 +350,31 @@ class Queue(Iterable[Track]):
 
     def put(self, item: Track) -> None:
         """Put the given item into the back of the queue."""
-        if self.is_full:
-            if not self._overflow:
-                if self._return_exceptions:
-                    raise QueueFull(
-                        f"Queue max_size of {self.max_size} has been reached.",
-                    )
-                else:
-                    return
+        if self._check_puttable():
+            return self._put(self._check_track(item))
 
-            self._drop()
-
-        return self._put(self._check_track(item))
+    def put_next(self, item: Track) -> None:
+        """Put the given item after current track."""
+        if self._check_puttable():
+            return self._insert(
+                self.find_position(self._current_item) + 1 if self._current_item else 0,
+                self._check_track(item),
+            )
 
     def put_at_index(self, index: int, item: Track) -> None:
         """Put the given item into the queue at the specified index."""
-        if self.is_full:
-            if not self._overflow:
-                if self._return_exceptions:
-                    raise QueueFull(
-                        f"Queue max_size of {self.max_size} has been reached.",
-                    )
-                else:
-                    return
-
-            self._drop()
-
-        return self._insert(index, self._check_track(item))
+        if self._check_puttable():
+            return self._insert(index, self._check_track(item))
 
     def put_at_front(self, item: Track) -> None:
         """Put the given item into the front of the queue."""
-        if self.is_full:
-            if not self._overflow:
-                if self._return_exceptions:
-                    raise QueueFull(
-                        f"Queue max_size of {self.max_size} has been reached.",
-                    )
-                else:
-                    return
-
-            self._drop()
-
-        return self.put_at_index(0, item)
+        if self._check_puttable():
+            return self.put_at_index(0, item)
 
     def put_list(self, item: List[Track]) -> None:
         """Put the given list into the back of the queue."""
-        if self.is_full:
-            if not self._overflow:
-                if self._return_exceptions:
-                    raise QueueFull(
-                        f"Queue max_size of {self.max_size} has been reached.",
-                    )
-                else:
-                    return
-
-            for _ in range(item.__len__()):
+        if self._check_puttable() and self.__len__() + 1 >= self.max_size:
+            for _ in range(item.__len__() - 1):
                 self._drop()
 
         [self._check_track(track) for track in item]
@@ -417,10 +416,10 @@ class Queue(Iterable[Track]):
         """Remove all items from the queue."""
         self._queue.clear()
 
-    def set_loop_mode(self, mode: LoopMode | None) -> None:
+    def set_loop_mode(self, mode: LoopMode | None = None) -> None:
         """
         Sets the loop mode of the queue.
-        Takes the LoopMode enum as an argument.
+        Takes the LoopMode enum or nothing as an argument.
         """
         self._loop_mode = mode
 
@@ -440,10 +439,12 @@ class Queue(Iterable[Track]):
         """
         Jumps to the item specified in the queue from the current position.
         """
-        if self._loop_mode == LoopMode.TRACK:
+        if self._loop_mode == LoopMode.TRACK or self._loose_mode:
             if self._return_exceptions:
                 raise QueueException(
                     "Jumping the queue whilst looping a track is not allowed."
+                    if self._loop_mode == LoopMode.TRACK
+                    else "Jumping the queue while loose mode is True is not allowed."
                 )
             else:
                 return
@@ -477,7 +478,5 @@ class Queue(Iterable[Track]):
             self._insert(index, item)
 
     def set_primary(self, item: Track) -> None:
-        """
-        Set the primary item of the queue.
-        """
+        """Set the primary item of the queue."""
         self._primary = self._check_track(item)
