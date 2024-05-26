@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from disnake import ClientUser, Interaction, Member, User
 from disnake.ext import commands
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 """
 LAVALINK BASE MODELS
@@ -116,6 +116,11 @@ class LavalinkPlaylistInfo(BaseModel):
     selectedTrack: Optional[int] = -1
 
 
+class AlbumLink(BaseModel):
+    name: str
+    id: str
+
+
 """
 LAVALINK MAIN MODELS
 """
@@ -124,7 +129,7 @@ LAVALINK MAIN MODELS
 class Track(ExtraModel):
     """Base lavalink track model."""
 
-    uuid: str = uuid4().__str__()  # Unique uuid for the track
+    _uuid: Optional[str] = None
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     encoded: str
@@ -133,20 +138,29 @@ class Track(ExtraModel):
     userData: Optional[Any] = None
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    lyrics: Optional[dict] = None
+    lyrics: Optional[Union[str, dict]] = None
 
     ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
-    requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
+    requester: Optional[Union[Member, User, ClientUser, str]] = (
+        None  # Additional requester
+    )
 
     filters: Optional[Filters] = None  # Additional filters
 
-    playlist: Optional["Playlist"] = None
+    album: Optional[AlbumLink] = None
 
     description: Optional[str] = None  # Optional track description
 
     color: Optional[int] = None  # Track color
 
     tag: Optional[AnyStr] = None  # Optional track tag
+
+    @computed_field
+    @property
+    def uuid(self) -> str:
+        if not self._uuid:
+            self._uuid = uuid4().__str__()
+        return self._uuid
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Track):
@@ -171,26 +185,29 @@ class Playlist(ExtraModel):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     uri: Optional[str] = None
+
     ctx: Optional[Union[commands.Context, Interaction]] = None  # Additional context
     requester: Optional[Union[Member, User, ClientUser]] = None  # Additional requester
 
     description: Optional[str] = None  # Optional playlist description
 
+    thumbnail: Optional[str] = None
+
     color: Optional[int] = None  # Playlist color
 
     tag: Optional[AnyStr] = None  # Optional playlist tag
 
+    @computed_field
+    @property
     def length(self) -> int:
         """Length of playlist"""
         return sum([t.info.length for t in self.tracks])
 
+    @computed_field
+    @property
     def track_count(self) -> int:
         """Count of tracks in playlist"""
         return len(self.tracks)
-
-    def thumbnail(self) -> str | None:
-        """Thumbnail of playlist (artwork)"""
-        return self.pluginInfo.get("artworkUrl") if self.pluginInfo else None
 
     def __str__(self) -> str:
         return self.info.name
