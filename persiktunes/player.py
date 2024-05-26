@@ -17,6 +17,7 @@ from .filters import Filter, Filters, Timescale
 
 # from .objects import Playlist, Track
 from .models import PlayerUpdateOP, Track, UpdatePlayerRequest, UpdatePlayerTrack
+from .models.restapi import LavalinkPlayer
 from .models.ws import *
 from .pool import Node, NodePool
 from .utils import LavalinkVersion
@@ -60,6 +61,8 @@ class Player(VoiceProtocol):
         self.channel: VoiceChannel = channel
         self._guild = channel.guild
 
+        self._guild_id = self._guild.id
+
         self._bot: Client = client
         self._node: Node = node if node else NodePool.get_node()
         self._current: Optional[Track] = None
@@ -82,6 +85,31 @@ class Player(VoiceProtocol):
         self.recommendations = self.rest.recommendations
         self.decode_track = self.rest.decode_track
         self.decode_tracks = self.rest.decode_tracks
+
+    async def from_model(self, model: LavalinkPlayer) -> Player:
+        self._current = model.track
+        self._volume = model.volume
+        self._paused = model.paused
+
+        self._last_position = model.state.position
+        self._is_connected = model.state.connected
+        self._ping = model.state.ping
+        self._last_update = model.state.time
+
+        self._guild_id = model.guildId
+
+        self._voice_state = {
+            "event": {"token": model.voice.token, "endpoint": model.voice.endpoint},
+            "sessionId": model.voice.sessionId,
+        }
+
+        self._log.debug(
+            f"Created player from LavalinkPlayer model {model.model_dump()}, connecting..."
+        )
+
+        await self.connect(timeout=0, reconnect=True)
+
+        return self
 
     def __repr__(self) -> str:
         return (
@@ -308,8 +336,11 @@ class Player(VoiceProtocol):
             self_deaf=self_deaf,
             self_mute=self_mute,
         )
+
         self._node._players[self.guild.id] = self
         self._is_connected = True
+
+        await self.node.set_player_channel(self, self.channel.id)
 
         self._log.debug(
             f"Connected to voice channel {self.channel} in guild {self.guild}."
@@ -329,6 +360,7 @@ class Player(VoiceProtocol):
         """Disconnects the player from voice."""
         try:
             await self.guild.change_voice_state(channel=None)
+            await self.node.set_player_channel(self, None)
         finally:
             self.cleanup()
             self._is_connected = False
