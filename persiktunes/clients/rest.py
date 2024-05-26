@@ -1,5 +1,3 @@
-import asyncio
-import logging
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 import aiohttp
@@ -10,7 +8,9 @@ from .. import __version__
 from ..enums import *
 from ..exceptions import NodeNotAvailable, NodeRestException
 from ..models.restapi import *
+from ..models.search import *
 from ..models.ws import *
+from ..search import YoutubeMusicSearch
 from ..utils import LavalinkVersion
 
 
@@ -60,6 +60,8 @@ class LavalinkRest:
             "User-Id": f"{self.user_id}",
             "Client-Name": f"PersikTunes/{__version__}",
         }
+
+        self.ytmclient = YoutubeMusicSearch(node=node)
 
     async def send(
         self,
@@ -117,6 +119,29 @@ class LavalinkRest:
         )
         return await resp.json()
 
+    def patch_context(
+        self,
+        data: Union[Track, Playlist, Album],
+        *,
+        ctx: Optional[Union[commands.Context, Interaction]] = None,
+        requester: Optional[Union[Member, User]] = None,
+        description: Optional[str] = None,
+        color: Optional[int] = None,
+        tag: Optional[AnyStr] = None,
+    ):
+
+        update = {
+            "ctx": ctx,
+            "requester": requester,
+            "description": description,
+            "color": color,
+            "tag": tag,
+        }
+
+        return data.model_copy(
+            update={k: v for k, v in update.items() if v is not None}
+        )
+
     async def search(
         self,
         query: str,
@@ -125,96 +150,31 @@ class LavalinkRest:
         ctx: Optional[Union[commands.Context, Interaction]] = None,
         requester: Optional[Union[Member, User]] = None,
         description: Optional[str] = None,
-        use_lavasearch: bool = False,
-        types: Optional[List[Literal["playlist", "track", "artist", "album"]]] = [
-            "playlist",
-            "track",
-            "artist",
-            "album",
-        ],
-    ) -> LavalinkTrackLoadingResponse | LavaSearchLoadingResponse:
+    ) -> LavalinkTrackLoadingResponse:
 
-        if not use_lavasearch:
-            if not re.match(URLRegex.BASE_URL, query):
-                query = f"{stype.value}:{query}"
+        update_ctx = {
+            "ctx": ctx,
+            "requester": requester,
+            "description": description,
+        }
 
-            response = await self.send("GET", f"loadtracks?identifier={query}")
-            validated = LavalinkTrackLoadingResponse.model_validate(response)
+        if not re.match(URLRegex.BASE_URL, query):
+            query = f"{stype.value}:{query}"
 
-            if validated.loadType == "search":
-                data = []
+        response = await self.send("GET", f"loadtracks?identifier={query}")
+        validated = LavalinkTrackLoadingResponse.model_validate(response)
 
-                for track in validated.data:
-                    data.append(
-                        track.model_copy(
-                            update={
-                                "ctx": ctx,
-                                "requester": requester,
-                                "description": description,
-                            }
-                        )
-                    )
+        if validated.loadType == "search":
+            data = []
 
-                validated = validated.model_copy(update={"data": data})
+            for track in validated.data:
+                data.append(track.model_copy(update=update_ctx))
 
-            elif validated.loadType in ("track", "playlist"):
-                data = validated.data.model_copy(
-                    update={
-                        "ctx": ctx,
-                        "requester": requester,
-                        "description": description,
-                    }
-                )
-                validated = validated.model_copy(update={"data": data})
+            validated = validated.model_copy(update={"data": data})
 
-            return validated
-
-        response = await self.send(
-            "GET",
-            f"loadsearch?query={query}" + "&types=" + ",".join(types),
-        )
-        validated = LavaSearchLoadingResponse.model_validate(response)
-
-        tracks = playlists = albums = []
-
-        for track in validated.data.tracks or []:
-            tracks.append(
-                track.model_copy(
-                    update={
-                        "ctx": ctx,
-                        "requester": requester,
-                        "description": description,
-                    }
-                )
-            )
-
-        for playlist in validated.data.playlists or []:
-            playlists.append(
-                playlist.model_copy(
-                    update={
-                        "ctx": ctx,
-                        "requester": requester,
-                        "description": description,
-                    }
-                )
-            )
-
-        for album in validated.data.albums or []:
-            albums.append(
-                album.model_copy(
-                    update={
-                        "ctx": ctx,
-                        "requester": requester,
-                        "description": description,
-                    }
-                )
-            )
-
-        validated = validated.model_copy(
-            update={
-                "data": {"tracks": tracks, "playlists": playlists, "albums": albums},
-            }
-        )
+        elif validated.loadType in ("track", "playlist"):
+            data = validated.data.model_copy(update=update_ctx)
+            validated = validated.model_copy(update={"data": data})
 
         return validated
 
@@ -285,7 +245,9 @@ class LavalinkRest:
 
     async def destroy_player(self, guild_id: int) -> None:
         await self.send(
-            "DELETE", f"sessions/{self.node._session_id}/players/{guild_id}"
+            "DELETE",
+            f"sessions/{self.node._session_id}/players/{guild_id}",
+            ignore_if_available=True,
         )
 
     async def update_session(self, data: Union[UpdateSessionRequest, dict]) -> None:
