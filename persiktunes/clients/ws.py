@@ -93,12 +93,6 @@ class LavalinkWebsocket:
 
         self.user_id = user_id
 
-        self._headers = {
-            "Authorization": self._password,
-            "User-Id": self.user_id,
-            "Client-Name": f"PersikTunes/{__version__}",
-        }
-
         self._bot.add_listener(self._update_handler, "on_socket_response")
 
     @property
@@ -144,7 +138,11 @@ class LavalinkWebsocket:
         if op == "ready":
             self._session_id = ReadyOP.model_validate(data).sessionId
             self._node._session_id = self._session_id
-            return await self._configure_resuming()
+            if self._node._version.major == 4:
+                await self._node.set_resume_key(self._session_id)
+                await self._configure_resuming()
+
+            return self._node.event.set()
 
         elif op == "stats":
             self._node._stats = StatsOP.model_validate(data)
@@ -179,7 +177,7 @@ class LavalinkWebsocket:
                 self._log.debug(f"Recieved raw websocket message {msg}")
                 self._loop.create_task(self._handle_ws_msg(data=data))
             except exceptions.ConnectionClosed:
-                if self._node.player_count > 0 and not self._node._resume:
+                if self._node.player_count > 0 and not self._node._get_resume_key:
                     for _player in self._node.players.values():
                         self._loop.create_task(_player.destroy())
 
