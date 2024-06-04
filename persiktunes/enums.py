@@ -307,6 +307,53 @@ class URLRegex:
     BASE_URL = re.compile(r"https?://(?:www\.)?.+")
 
 
+# class TypeUrlRegex(Enum):
+#     """
+#     ## The enum for all the Type Regexes in use by PersikTunes.
+
+#     `TypeRegex.SPOTIFY` returns the Spotify Type Regex.
+
+#     `TypeRegex.YOUTUBE` returns the Youtube Type Regex.
+
+#     `TypeRegex.APPLE_MUSIC` returns the Apple Music Type Regex.
+
+#     `TypeRegex.YANDEX_MUSIC` returns the Yandex Music Type Regex.
+#     """
+
+#     YOUTUBE = re.compile(
+#         r"^((?:https?:)?\/\/)?((?:www|m|music)\.)?((?:youtube\.com|youtu\.be))(\/(?:list=|v\/)?)([\w\-]+)(\S+)?$"
+#     )
+
+#     SPOTIFY = re.compile(
+#         r"/^(https:\/\/[a-z]+\.spotify\.com\/(track\/|user\/(.*)\/playlist\/))(.*)$"
+#     )
+
+#     URL = re.compile(r"https?://(?:www\.)?.+")
+
+
+# class IdMatchingRegex(Enum):
+#     """
+#     ## The enum for all the Id Matching Regexes in use by PersikTunes.
+
+#     `IdMatchingRegex.SPOTIFY` returns the Spotify Id Regex.
+
+#     `IdMatchingRegex.YOUTUBE` returns the Youtube Id Regex.
+#     """
+
+#     YOUTUBE_ID = re.compile(r"((\?(?:v|list)=)|(youtu.be\/))(\w*)")
+
+
+class YoutubeIdMatchingRegex:
+    """
+    ## The enum for all the Youtube Regexes in use by PersikTunes.
+
+    """
+
+    PLAYLIST = re.compile(r"(?:list=|&list=)(\w*)")
+
+    SONG = re.compile(r"(?:v=|youtu\.be\/)(\w*)")
+
+
 class LogLevel(IntEnum):
     """
     ## The enum for specifying the logging level within PersikTunes.
