@@ -12,8 +12,6 @@ from typing import Iterable, Iterator, List, Optional, Union
 
 from .enums import LoopMode
 from .exceptions import QueueEmpty, QueueException, QueueFull
-
-# from .objects import Track
 from .models import Track
 
 
@@ -42,7 +40,7 @@ class Queue(Iterable[Track]):
         _loose_mode: bool "If True, track will delete from queue when it ends"
         ```
         """
-        self.max_size: Optional[int] = max_size
+        self._max_size: Optional[int] = max_size
         "max size of the queue"
         self._current_item: Optional[Track] = None
         "current item in the queue"
@@ -68,9 +66,7 @@ class Queue(Iterable[Track]):
 
     def __repr__(self) -> str:
         """Official representation with max_size and member count."""
-        return (
-            f"<{self.__class__.__name__} max_size={self.max_size} members={self.count}>"
-        )
+        return f"<{self.__class__.__name__} max_size={self._max_size} members={self.count}>"
 
     def __bool__(self) -> bool:
         """Treats the queue as a bool, with it evaluating True when it contains members."""
@@ -187,7 +183,7 @@ class Queue(Iterable[Track]):
             if not self._overflow:
                 if self._return_exceptions:
                     raise QueueFull(
-                        f"Queue max_size of {self.max_size} has been reached.",
+                        f"Queue max_size of {self._max_size} has been reached.",
                     )
                 return False
             else:
@@ -231,7 +227,7 @@ class Queue(Iterable[Track]):
     @property
     def is_full(self) -> bool:
         """Returns True if queue item count has reached max_size."""
-        return False if self.max_size is None else self.count >= self.max_size
+        return False if self._max_size is None else self.count >= self._max_size
 
     @property
     def is_looping(self) -> bool:
@@ -266,7 +262,7 @@ class Queue(Iterable[Track]):
         return self._queue
 
     def get(self) -> Track:
-        """Alias for `next()` with additional check LoopMode, primary and loose_mode."""
+        """Alias for `next()` with additional check LoopMode."""
 
         if self._loop_mode == LoopMode.TRACK:
             return self._current_item
@@ -373,7 +369,7 @@ class Queue(Iterable[Track]):
 
     def put_list(self, item: List[Track]) -> None:
         """Put the given list into the back of the queue."""
-        if self._check_puttable() and self.__len__() + 1 >= self.max_size:
+        if self._check_puttable() and self.__len__() + 1 >= self._max_size:
             for _ in range(item.__len__() - 1):
                 self._drop()
 
@@ -390,13 +386,13 @@ class Queue(Iterable[Track]):
         if atomic:
             iterable = self._check_track_container(iterable)
 
-            if not self._overflow and self.max_size is not None:
+            if not self._overflow and self._max_size is not None:
                 new_len = len(iterable)
 
-                if (new_len + self.count) > self.max_size:
+                if (new_len + self.count) > self._max_size:
                     if self._return_exceptions:
                         raise QueueFull(
-                            f"Queue has {self.count}/{self.max_size} items, "
+                            f"Queue has {self.count}/{self._max_size} items, "
                             f"cannot add {new_len} more.",
                         )
                     else:
@@ -407,7 +403,7 @@ class Queue(Iterable[Track]):
 
     def copy(self) -> Queue:
         """Create a copy of the current queue including it's members."""
-        new_queue = self.__class__(max_size=self.max_size)
+        new_queue = self.__class__(max_size=self._max_size)
         new_queue._queue = copy(self._queue)
 
         return new_queue
