@@ -1,12 +1,15 @@
 """Import search template class from here"""
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..models import Album, Artist, Browse, Mood, Playlist, Track
 
 
 class BaseSearch:
     """Search class template"""
+
+    def __init__(self, node: Any, **kwargs) -> None:
+        raise NotImplementedError
 
     async def album(self, id: str, *args, **kwargs) -> Optional[Album]:
         raise NotImplementedError
@@ -26,19 +29,23 @@ class BaseSearch:
     async def get_mood_playlists(self, mood: Mood, *args, **kwargs) -> List[Playlist]:
         raise NotImplementedError
 
-    async def search_songs(self, query: str, *args, **kwargs) -> Optional[List[Track]]:
+    async def search_songs(
+        self, query: str, limit: int = 10, *args, **kwargs
+    ) -> Optional[List[Track]]:
         raise NotImplementedError
 
-    async def search_albums(self, query: str, *args, **kwargs) -> Optional[List[Album]]:
+    async def search_albums(
+        self, query: str, limit: int = 10, *args, **kwargs
+    ) -> Optional[List[Album]]:
         raise NotImplementedError
 
     async def search_playlists(
-        self, query: str, *args, **kwargs
+        self, query: str, limit: int = 10, *args, **kwargs
     ) -> Optional[List[Playlist]]:
         raise NotImplementedError
 
     async def search_artists(
-        self, query: str, *args, **kwargs
+        self, query: str, limit: int = 10, *args, **kwargs
     ) -> Optional[List[Artist]]:
         raise NotImplementedError
 
