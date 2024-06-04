@@ -82,7 +82,6 @@ class Player(VoiceProtocol):
         self.rest = self._node.rest
 
         self.search = self.rest.search
-        self.recommendations = self.rest.recommendations
         self.decode_track = self.rest.decode_track
         self.decode_tracks = self.rest.decode_tracks
 
