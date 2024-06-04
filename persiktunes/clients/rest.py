@@ -10,7 +10,7 @@ from ..exceptions import NodeNotAvailable, NodeRestException
 from ..models.restapi import *
 from ..models.search import *
 from ..models.ws import *
-from ..search import YoutubeMusicSearch
+from ..search import AbstractSearch, YoutubeMusicSearch
 from ..utils import LavalinkVersion
 
 
@@ -61,7 +61,7 @@ class LavalinkRest:
             "Client-Name": f"PersikTunes/{__version__}",
         }
 
-        self.ytmclient = YoutubeMusicSearch(node=node)
+        self.abstract_search = AbstractSearch(node=node)
 
     async def send(
         self,
@@ -122,20 +122,20 @@ class LavalinkRest:
     def patch_context(
         self,
         data: Union[Track, Playlist, Album],
-        *,
-        ctx: Optional[Union[commands.Context, Interaction]] = None,
-        requester: Optional[Union[Member, User]] = None,
-        description: Optional[str] = None,
-        color: Optional[int] = None,
-        tag: Optional[AnyStr] = None,
+        # ctx: Optional[Union[commands.Context, Interaction]] = None,
+        # requester: Optional[Union[Member, User]] = None,
+        # description: Optional[str] = None,
+        # color: Optional[int] = None,
+        # tag: Optional[AnyStr] = None,
+        **kwargs,
     ):
 
         update = {
-            "ctx": ctx,
-            "requester": requester,
-            "description": description,
-            "color": color,
-            "tag": tag,
+            "ctx": kwargs.get("ctx"),
+            "requester": kwargs.get("requester"),
+            "description": kwargs.get("description"),
+            "color": kwargs.get("color"),
+            "tag": kwargs.get("tag"),
         }
 
         return data.model_copy(
@@ -148,7 +148,7 @@ class LavalinkRest:
         *,
         stype: SearchType = SearchType.ytsearch,
         ctx: Optional[Union[commands.Context, Interaction]] = None,
-        requester: Optional[Union[Member, User]] = None,
+        requester: Optional[Union[Member, User, str]] = None,
         description: Optional[str] = None,
     ) -> LavalinkTrackLoadingResponse:
 
@@ -177,23 +177,6 @@ class LavalinkRest:
             validated = validated.model_copy(update={"data": data})
 
         return validated
-
-    async def recommendations(
-        self,
-        tracks: List[Track],
-        *,
-        ctx: Optional[Union[commands.Context, Interaction]] = None,
-        requester: Optional[Union[Member, User]] = None,
-        description: Optional[str] = None,
-    ) -> LavalinkTrackLoadingResponse:
-
-        return await self.search(
-            f'seed_tracks={",".join([track.identifier for track in tracks])}',
-            stype=SearchType.sprec,
-            ctx=ctx,
-            requester=requester,
-            description=description,
-        )
 
     async def decode_track(self, encoded: str) -> LavalinkTrackDecodeResponse:
         response = await self.send("GET", f"decodetrack?encodedTrack={encoded}")
